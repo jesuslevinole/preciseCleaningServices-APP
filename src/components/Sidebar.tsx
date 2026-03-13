@@ -19,16 +19,16 @@ export default function Sidebar({
       <div className="sidebar-header">
         <div className="logo-container">
           <div className="logo-icon"><Building2 size={20} color="white" /></div>
-          {isSidebarOpen && <span className="logo-text">CleanPro</span>}
+          {isSidebarOpen && <span className="logo-text">Precise Cleaning</span>}
         </div>
       </div>
       
       <div className="sidebar-toggle-container">
         <button className="sidebar-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
           {isSidebarOpen ? (
-            <><PanelLeftClose size={18} /><span>&lt;&lt;</span></>
+            <><PanelLeftClose size={18} /><span></span></>
           ) : (
-            <><PanelLeftOpen size={18} /><span>&gt;&gt;</span></>
+            <><PanelLeftOpen size={18} /><span></span></>
           )}
         </button>
       </div>
