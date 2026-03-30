@@ -60,9 +60,10 @@ const initialTax: Tax = { id: 'tax-1', percentage: 8.25 };
 interface SettingsViewProps {
   currentSettingView: string;
   setCurrentSettingView: Dispatch<SetStateAction<string>>;
+  onOpenMenu: () => void;
 }
 
-export default function SettingsView({ currentSettingView, setCurrentSettingView }: SettingsViewProps) {
+export default function SettingsView({ currentSettingView, setCurrentSettingView, onOpenMenu }: SettingsViewProps) {
   const [categories, setCategories] = useState<CategoryExpense[]>(initialCategories);
   const [teams, setTeams] = useState<Team[]>(initialTeams);
   const [responsables, setResponsables] = useState<Responsable[]>(initialResponsables);
@@ -92,6 +93,30 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
   const [showQuickAdd, setShowQuickAdd] = useState(false); 
 
   const activeSettingOption = settingsOptions.find(opt => opt.id === currentSettingView);
+
+  // --- ESTILOS BLINDADOS (TABLAS Y MODALES) ---
+  const thStyle = { backgroundColor: '#f9fafb', padding: '6px 12px', color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb', textAlign: 'left' as const };
+  const tdStyle = { padding: '6px 12px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontSize: '0.95rem' };
+
+  const s = {
+    overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' } as React.CSSProperties,
+    modal: { backgroundColor: '#ffffff', width: '100%', maxWidth: '450px', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' } as React.CSSProperties,
+    modalWide: { maxWidth: '700px' },
+    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
+    title: { fontSize: '1.15rem', fontWeight: 600, color: '#111827', margin: 0 },
+    body: { padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' } as React.CSSProperties,
+    footer: { display: 'flex', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', flexShrink: 0 },
+    formGroup: { display: 'flex', flexDirection: 'column', gap: '6px' } as React.CSSProperties,
+    label: { fontSize: '0.9rem', color: '#6b7280', fontWeight: 500 },
+    input: { padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none' } as React.CSSProperties,
+    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
+    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
+    btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
+    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex' },
+    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' } as React.CSSProperties,
+    detailLabel: { fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
+    detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500 }
+  };
 
   const handleOpenForm = (item?: any) => {
     if (item) {
@@ -254,16 +279,40 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
   });
 
   return (
-    <div className="settings-wrapper fade-in">
+    <div className="settings-wrapper fade-in" style={{ padding: '20px' }}>
       {currentSettingView === 'menu' && (
         <>
-          <header className="settings-header"><h2>Settings</h2><p>Manage your system parameters and lists</p></header>
-          <div className="settings-grid">
+          <header className="settings-header">
+            <div className="header-titles">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Abrir menú" style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                  </svg>
+                </button>
+                <h2 style={{ margin: 0 }}>Settings</h2>
+              </div>
+              <p style={{ marginTop: '4px', color: '#6b7280' }}>Manage your system parameters and lists</p>
+            </div>
+          </header>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px', marginTop: '24px' }}>
             {settingsOptions.map((option) => {
               const Icon = option.icon;
               return (
-                <button key={option.id} className="setting-card" onClick={() => setCurrentSettingView(option.id)}>
-                  <div className="setting-card-icon"><Icon size={24} /></div><span className="setting-card-title">{option.label}</span>
+                <button 
+                  key={option.id} 
+                  onClick={() => setCurrentSettingView(option.id)}
+                  style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', color: '#111827', transition: 'all 0.2s ease', width: '100%', outline: 'none' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.1)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
+                >
+                  <div style={{ backgroundColor: '#eff6ff', color: '#3b82f6', width: '56px', height: '56px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon size={24} />
+                  </div>
+                  <span style={{ fontSize: '1rem', fontWeight: 500 }}>{option.label}</span>
                 </button>
               );
             })}
@@ -273,146 +322,161 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
 
       {currentSettingView !== 'menu' && activeSettingOption && (
         <div className="table-view-container fade-in">
-          <header className="table-view-header">
-            <div className="table-view-title-group">
-              <button className="btn-back" onClick={() => setCurrentSettingView('menu')}>&lt;&lt; Back</button>
-              <div className="title-with-icon"><activeSettingOption.icon size={28} className="title-icon" /><h2>{activeSettingOption.label}</h2></div>
+          <header className="table-view-header" style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: '20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '16px' }}>
+            <div className="table-view-title-group" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Abrir menú" style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '4px 8px', cursor: 'pointer', color: '#111827' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                  </svg>
+                </button>
+                <button style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.9rem', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px 0', fontFamily: 'monospace' }} onClick={() => setCurrentSettingView('menu')}>&lt;&lt; Back</button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <activeSettingOption.icon size={28} color="#3b82f6" />
+                <h2 style={{ fontSize: '1.8rem', margin: 0, color: '#111827' }}>{activeSettingOption.label}</h2>
+              </div>
             </div>
             {currentSettingView !== 'tax' && (
-              <button className="btn-primary" onClick={() => handleOpenForm()}><Plus size={18} /> Add New</button>
+              <button onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '8px', fontWeight: 500, cursor: 'pointer' }}><Plus size={18} /> Add New</button>
             )}
           </header>
 
-          <div className="table-container">
-            <table className="data-table interactive-table">
-              <thead>
-                <tr>
-                  {currentSettingView === 'status' && <th>Order</th>}
-                  {currentSettingView === 'task' && <th>Place</th>}
-                  
-                  {currentSettingView === 'task' ? <th>Task</th> : 
-                   currentSettingView === 'tax' ? <th>Tax %</th> : 
-                   currentSettingView === 'business' ? <th>Business</th> : 
-                   currentSettingView === 'payment' ? <th>Payment Method</th> :
-                   <th>Name</th>}
-                  
-                  {currentSettingView === 'product' && <th>Price</th>}
-                  {currentSettingView === 'service' && <th>Estimated time</th>}
-                  
-                  {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && <th>Business</th>}
-                  {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && <th>Color</th>}
-                  
-                  <th className="action-column">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentSettingView === 'category' && categories.map((cat) => (
-                  <tr key={cat.id} onClick={() => handleOpenDetail(cat)}>
-                    <td>{cat.name}</td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(cat); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(cat.id); }}><Trash2 size={16} /></button></div></td>
+          {/* TABLA DE CONFIGURACIONES BLINDADA */}
+          <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', width: '100%', overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto', width: '100%' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                <thead>
+                  <tr>
+                    {currentSettingView === 'status' && <th style={thStyle}>Order</th>}
+                    {currentSettingView === 'task' && <th style={thStyle}>Place</th>}
+                    
+                    {currentSettingView === 'task' ? <th style={thStyle}>Task</th> : 
+                     currentSettingView === 'tax' ? <th style={thStyle}>Tax %</th> : 
+                     currentSettingView === 'business' ? <th style={thStyle}>Business</th> : 
+                     currentSettingView === 'payment' ? <th style={thStyle}>Payment Method</th> :
+                     <th style={thStyle}>Name</th>}
+                    
+                    {currentSettingView === 'product' && <th style={thStyle}>Price</th>}
+                    {currentSettingView === 'service' && <th style={thStyle}>Estimated time</th>}
+                    
+                    {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && <th style={thStyle}>Business</th>}
+                    {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && <th style={thStyle}>Color</th>}
+                    
+                    <th style={{...thStyle, textAlign: 'right', width: '100px'}}>Actions</th>
                   </tr>
-                ))}
-
-                {currentSettingView === 'team' && teams.map((team) => (
-                  <tr key={team.id} onClick={() => handleOpenDetail(team)}>
-                    <td>{team.name}</td><td className="text-secondary">{team.business || '-'}</td><td><span className="color-dot" style={{ backgroundColor: team.color }}></span></td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(team); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(team.id); }}><Trash2 size={16} /></button></div></td>
-                  </tr>
-                ))}
-
-                {currentSettingView === 'responsable' && responsables.map((resp) => (
-                  <tr key={resp.id} onClick={() => handleOpenDetail(resp)}>
-                    <td>{resp.name}</td><td><span className="color-dot" style={{ backgroundColor: resp.color }}></span></td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(resp); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(resp.id); }}><Trash2 size={16} /></button></div></td>
-                  </tr>
-                ))}
-
-                {currentSettingView === 'priority' && priorities.map((priority) => (
-                  <tr key={priority.id} onClick={() => handleOpenDetail(priority)}>
-                    <td>{priority.name}</td><td className="text-secondary">{priority.business || '-'}</td><td><span className="color-dot" style={{ backgroundColor: priority.color }}></span></td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(priority); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(priority.id); }}><Trash2 size={16} /></button></div></td>
-                  </tr>
-                ))}
-
-                {currentSettingView === 'status' && statuses.map((status) => (
-                  <tr key={status.id} onClick={() => handleOpenDetail(status)}>
-                    <td>{status.order}</td><td>{status.name}</td><td className="text-secondary">{status.business || '-'}</td><td><span className="color-dot" style={{ backgroundColor: status.color }}></span></td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(status); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(status.id); }}><Trash2 size={16} /></button></div></td>
-                  </tr>
-                ))}
-
-                {currentSettingView === 'place' && places.map((place) => (
-                  <tr key={place.id} onClick={() => handleOpenDetail(place)}>
-                    <td>{place.name}</td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(place.id); }}><Trash2 size={16} /></button></div></td>
-                  </tr>
-                ))}
-
-                {currentSettingView === 'task' && sortedTasks.map((task) => {
-                  const placeName = places.find(p => p.id === task.placeId)?.name || 'Unknown Place';
-                  return (
-                    <tr key={task.id} onClick={() => handleOpenDetail(task)}>
-                      <td className="text-secondary">{placeName}</td><td style={{ fontWeight: '500' }}>{task.name}</td>
-                      <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(task); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(task.id); }}><Trash2 size={16} /></button></div></td>
+                </thead>
+                <tbody>
+                  {currentSettingView === 'category' && categories.map((cat) => (
+                    <tr key={cat.id} onClick={() => handleOpenDetail(cat)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{cat.name}</td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(cat); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(cat.id); }}><Trash2 size={16} /></button></div></td>
                     </tr>
-                  )
-                })}
+                  ))}
 
-                {currentSettingView === 'product' && products.map((product) => (
-                  <tr key={product.id} onClick={() => handleOpenDetail(product)}>
-                    <td>{product.name}</td><td className="text-secondary">{product.price ? `$${Number(product.price).toFixed(2)}` : '-'}</td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(product); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(product.id); }}><Trash2 size={16} /></button></div></td>
-                  </tr>
-                ))}
+                  {currentSettingView === 'team' && teams.map((team) => (
+                    <tr key={team.id} onClick={() => handleOpenDetail(team)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{team.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{team.business || '-'}</td><td style={tdStyle}><span className="color-dot" style={{ backgroundColor: team.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%' }}></span></td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(team); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(team.id); }}><Trash2 size={16} /></button></div></td>
+                    </tr>
+                  ))}
 
-                {currentSettingView === 'business' && businesses.map((bus) => (
-                  <tr key={bus.id} onClick={() => handleOpenDetail(bus)}>
-                    <td>{bus.name}</td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(bus); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(bus.id); }}><Trash2 size={16} /></button></div></td>
-                  </tr>
-                ))}
-                
-                {currentSettingView === 'service' && services.map((srv) => (
-                  <tr key={srv.id} onClick={() => handleOpenDetail(srv)}>
-                    <td>{srv.name}</td><td className="text-secondary">{srv.estimatedTime || '-'}</td><td className="text-secondary">{srv.business || '-'}</td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(srv); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(srv.id); }}><Trash2 size={16} /></button></div></td>
-                  </tr>
-                ))}
+                  {currentSettingView === 'responsable' && responsables.map((resp) => (
+                    <tr key={resp.id} onClick={() => handleOpenDetail(resp)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{resp.name}</td><td style={tdStyle}><span className="color-dot" style={{ backgroundColor: resp.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%' }}></span></td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(resp); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(resp.id); }}><Trash2 size={16} /></button></div></td>
+                    </tr>
+                  ))}
 
-                {currentSettingView === 'payment' && paymentMethods.map((payment) => (
-                  <tr key={payment.id} onClick={() => handleOpenDetail(payment)}>
-                    <td>{payment.name}</td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(payment); }}><Edit2 size={16} /></button><button className="btn-icon delete" onClick={(e) => { e.stopPropagation(); handleDeleteClick(payment.id); }}><Trash2 size={16} /></button></div></td>
-                  </tr>
-                ))}
+                  {currentSettingView === 'priority' && priorities.map((priority) => (
+                    <tr key={priority.id} onClick={() => handleOpenDetail(priority)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{priority.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{priority.business || '-'}</td><td style={tdStyle}><span className="color-dot" style={{ backgroundColor: priority.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%' }}></span></td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(priority); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(priority.id); }}><Trash2 size={16} /></button></div></td>
+                    </tr>
+                  ))}
 
-                {currentSettingView === 'tax' && (
-                  <tr onClick={() => handleOpenDetail(taxValue)}>
-                    <td style={{ fontWeight: '500' }}>{taxValue.percentage}%</td>
-                    <td className="action-column"><div className="action-group"><button className="btn-icon edit" onClick={(e) => { e.stopPropagation(); handleOpenForm(taxValue); }}><Edit2 size={16} /></button></div></td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  {currentSettingView === 'status' && statuses.map((status) => (
+                    <tr key={status.id} onClick={() => handleOpenDetail(status)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{status.order}</td><td style={tdStyle}>{status.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{status.business || '-'}</td><td style={tdStyle}><span className="color-dot" style={{ backgroundColor: status.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%' }}></span></td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(status); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(status.id); }}><Trash2 size={16} /></button></div></td>
+                    </tr>
+                  ))}
+
+                  {currentSettingView === 'place' && places.map((place) => (
+                    <tr key={place.id} onClick={() => handleOpenDetail(place)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{place.name}</td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(place.id); }}><Trash2 size={16} /></button></div></td>
+                    </tr>
+                  ))}
+
+                  {currentSettingView === 'task' && sortedTasks.map((task) => {
+                    const placeName = places.find(p => p.id === task.placeId)?.name || 'Unknown Place';
+                    return (
+                      <tr key={task.id} onClick={() => handleOpenDetail(task)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td style={{...tdStyle, color: '#6b7280'}}>{placeName}</td><td style={{...tdStyle, fontWeight: 500}}>{task.name}</td>
+                        <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(task); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(task.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    )
+                  })}
+
+                  {currentSettingView === 'product' && products.map((product) => (
+                    <tr key={product.id} onClick={() => handleOpenDetail(product)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{product.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{product.price ? `$${Number(product.price).toFixed(2)}` : '-'}</td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(product); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(product.id); }}><Trash2 size={16} /></button></div></td>
+                    </tr>
+                  ))}
+
+                  {currentSettingView === 'business' && businesses.map((bus) => (
+                    <tr key={bus.id} onClick={() => handleOpenDetail(bus)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{bus.name}</td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(bus); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(bus.id); }}><Trash2 size={16} /></button></div></td>
+                    </tr>
+                  ))}
+                  
+                  {currentSettingView === 'service' && services.map((srv) => (
+                    <tr key={srv.id} onClick={() => handleOpenDetail(srv)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{srv.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{srv.estimatedTime || '-'}</td><td style={{...tdStyle, color: '#6b7280'}}>{srv.business || '-'}</td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(srv); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(srv.id); }}><Trash2 size={16} /></button></div></td>
+                    </tr>
+                  ))}
+
+                  {currentSettingView === 'payment' && paymentMethods.map((payment) => (
+                    <tr key={payment.id} onClick={() => handleOpenDetail(payment)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={tdStyle}>{payment.name}</td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(payment); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(payment.id); }}><Trash2 size={16} /></button></div></td>
+                    </tr>
+                  ))}
+
+                  {currentSettingView === 'tax' && (
+                    <tr onClick={() => handleOpenDetail(taxValue)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <td style={{...tdStyle, fontWeight: '500'}}>{taxValue.percentage}%</td>
+                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(taxValue); }}><Edit2 size={16} /></button></div></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* --- MODAL DE FORMULARIO (CREAR / EDITAR) --- */}
+      {/* --- MODAL DE FORMULARIO (CREAR / EDITAR) BLINDADO --- */}
       {isFormModalOpen && (
-        <div className="modal-overlay" onClick={handleCloseForm}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <header className="modal-header">
-              <h3>{selectedItem ? 'Edit' : 'New'} {activeSettingOption?.label}</h3>
-              <button className="btn-icon close" onClick={handleCloseForm}><X size={20} /></button>
+        <div style={s.overlay} onClick={handleCloseForm}>
+          <div style={s.modal} onClick={e => e.stopPropagation()}>
+            <header style={s.header}>
+              <h3 style={s.title}>{selectedItem ? 'Edit' : 'New'} {activeSettingOption?.label}</h3>
+              <button style={s.closeBtn} onClick={handleCloseForm}><X size={20} /></button>
             </header>
-            <div className="modal-body">
+            <div style={s.body}>
 
               {currentSettingView === 'task' && (
-                 <div className="form-group mb-16">
-                  <label>Place <span className="required">*</span></label>
+                 <div style={s.formGroup}>
+                  <label style={s.label}>Place <span style={{color: '#3b82f6'}}>*</span></label>
                   <select 
-                    className="select-input"
+                    style={s.input}
                     value={formData.placeId}
                     onChange={(e) => setFormData({ ...formData, placeId: e.target.value })}
                   >
@@ -423,70 +487,73 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
               )}
 
               {currentSettingView === 'tax' ? (
-                 <div className="form-group">
-                  <label>Tax Percentage (%) <span className="required">*</span></label>
-                  <input type="number" step="0.01" autoFocus className="white-input" value={formData.percentage} onChange={(e) => setFormData({ ...formData, percentage: Number(e.target.value) })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+                 <div style={s.formGroup}>
+                  <label style={s.label}>Tax Percentage (%) <span style={{color: '#3b82f6'}}>*</span></label>
+                  <input type="number" step="0.01" autoFocus style={s.input} value={formData.percentage} onChange={(e) => setFormData({ ...formData, percentage: Number(e.target.value) })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
                 </div>
               ) : (
                 <>
                   {currentSettingView === 'status' && (
-                    <div className="form-group mb-16" style={{ marginBottom: '16px' }}>
-                      <label>Order <span className="required">*</span></label>
-                      <input type="number" autoFocus className="white-input" value={formData.order} onChange={(e) => setFormData({ ...formData, order: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+                    <div style={s.formGroup}>
+                      <label style={s.label}>Order <span style={{color: '#3b82f6'}}>*</span></label>
+                      <input type="number" autoFocus style={s.input} value={formData.order} onChange={(e) => setFormData({ ...formData, order: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
                     </div>
                   )}
 
-                  <div className="form-group">
-                    <label>
+                  <div style={s.formGroup}>
+                    <label style={s.label}>
                       {currentSettingView === 'task' ? 'Task Name' : 
                        currentSettingView === 'business' ? 'Business Name' : 
-                       currentSettingView === 'payment' ? 'Payment Method' : 'Name'} <span className="required">*</span>
+                       currentSettingView === 'payment' ? 'Payment Method' : 'Name'} <span style={{color: '#3b82f6'}}>*</span>
                     </label>
-                    <input type="text" autoFocus={currentSettingView !== 'status'} className="white-input" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+                    <input type="text" autoFocus={currentSettingView !== 'status'} style={s.input} value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
                   </div>
 
                   {currentSettingView === 'product' && (
-                    <div className="form-group mt-16">
-                      <label>Price ($)</label>
-                      <input type="number" step="0.01" className="white-input" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} placeholder="0.00" />
+                    <div style={s.formGroup}>
+                      <label style={s.label}>Price ($)</label>
+                      <input type="number" step="0.01" style={s.input} value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} placeholder="0.00" />
                     </div>
                   )}
 
                   {currentSettingView === 'service' && (
-                    <div className="form-group mt-16">
-                      <label>Estimated time (min)</label>
-                      <input type="number" className="white-input" value={formData.estimatedTime} onChange={(e) => setFormData({ ...formData, estimatedTime: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+                    <div style={s.formGroup}>
+                      <label style={s.label}>Estimated time (min)</label>
+                      <input type="number" style={s.input} value={formData.estimatedTime} onChange={(e) => setFormData({ ...formData, estimatedTime: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
                     </div>
                   )}
 
                   {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && (
-                    <div className="form-group mt-16">
-                      <label>Business</label>
-                      <input type="text" className="white-input" value={formData.business} onChange={(e) => setFormData({ ...formData, business: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+                    <div style={s.formGroup}>
+                      <label style={s.label}>Business</label>
+                      <input type="text" style={s.input} value={formData.business} onChange={(e) => setFormData({ ...formData, business: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
                     </div>
                   )}
 
                   {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && (
-                    <div className="form-group mt-16">
-                      <label>Color Identifier</label>
-                      <div className="color-picker-wrapper">
-                        <input type="color" className="color-input" value={formData.color.length === 7 ? formData.color : '#000000'} onChange={(e) => setFormData({ ...formData, color: e.target.value })} />
-                        <input type="text" className="color-hex-input" value={formData.color.toUpperCase()} onChange={handleColorTextChange} placeholder="#000000" />
+                    <div style={s.formGroup}>
+                      <label style={s.label}>Color Identifier</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <input type="color" style={{ width: '40px', height: '40px', padding: 0, border: 'none', cursor: 'pointer', borderRadius: '6px', backgroundColor: 'transparent' }} value={formData.color.length === 7 ? formData.color : '#000000'} onChange={(e) => setFormData({ ...formData, color: e.target.value })} />
+                        <input type="text" style={{...s.input, width: '120px', fontFamily: 'monospace'}} value={formData.color.toUpperCase()} onChange={handleColorTextChange} placeholder="#000000" />
                       </div>
                     </div>
                   )}
 
                   {currentSettingView === 'place' && (
-                    <div className="form-group mt-16">
-                      <label>Tasks associated with this Place</label>
-                      <div className="quick-add-wrapper">
-                        <input type="text" className="white-input quick-add-input" placeholder="Add a new task..." value={newTaskInput} onChange={(e) => setNewTaskInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTempTask(e)} />
-                        <button className="btn-outline" onClick={() => handleAddTempTask()}>Add</button>
+                    <div style={{...s.formGroup, marginTop: '8px'}}>
+                      <label style={s.label}>Tasks associated with this Place</label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input type="text" style={{...s.input, flex: 1}} placeholder="Add a new task..." value={newTaskInput} onChange={(e) => setNewTaskInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTempTask(e)} />
+                        <button style={{...s.btnOutline, padding: '6px 12px'}} onClick={() => handleAddTempTask()}>Add</button>
                       </div>
-                      <ul className="task-list">
-                        {formData.placeTasks.length === 0 && <li className="empty-cell" style={{padding: '10px'}}>No tasks added yet.</li>}
+                      <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {formData.placeTasks.length === 0 && <li style={{ padding: '12px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '6px' }}>No tasks added yet.</li>}
                         {formData.placeTasks.map((t, idx) => (
-                          <li key={idx} className="task-list-item"><span>{t.name}</span><button className="btn-icon delete" onClick={() => setFormData({...formData, placeTasks: formData.placeTasks.filter((_, i) => i !== idx)})}><Trash2 size={16}/></button></li>
+                          <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem' }}>
+                            <span>{t.name}</span>
+                            <button style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex' }} onClick={() => setFormData({...formData, placeTasks: formData.placeTasks.filter((_, i) => i !== idx)})}><Trash2 size={16}/></button>
+                          </li>
                         ))}
                       </ul>
                     </div>
@@ -495,112 +562,118 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
               )}
 
             </div>
-            <footer className="modal-footer">
-              <button className="btn-outline" onClick={handleCloseForm}>Cancel</button>
-              <button className="btn-primary" onClick={handleSave}>Save</button>
+            <footer style={{...s.footer, justifyContent: 'flex-end'}}>
+              <button style={s.btnOutline} onClick={handleCloseForm}>Cancel</button>
+              <button style={s.btnPrimary} onClick={handleSave}>Save</button>
             </footer>
           </div>
         </div>
       )}
 
-      {/* --- MODAL DE DETALLES --- */}
+      {/* --- MODAL DE DETALLES BLINDADO --- */}
       {isDetailModalOpen && selectedItem && (
-        <div className="modal-overlay" onClick={() => setIsDetailModalOpen(false)}>
-          <div className={`modal-content ${currentSettingView === 'place' ? 'modal-wide' : ''}`} onClick={e => e.stopPropagation()}>
-            <header className="modal-header">
-              <h3>{activeSettingOption?.label} Details</h3>
-              <button className="btn-icon close" onClick={() => setIsDetailModalOpen(false)}><X size={20} /></button>
+        <div style={s.overlay} onClick={() => setIsDetailModalOpen(false)}>
+          <div style={{...s.modal, ...(currentSettingView === 'place' ? s.modalWide : {})}} onClick={e => e.stopPropagation()}>
+            <header style={s.header}>
+              <h3 style={s.title}>{activeSettingOption?.label} Details</h3>
+              <button style={s.closeBtn} onClick={() => setIsDetailModalOpen(false)}><X size={20} /></button>
             </header>
-            <div className="modal-body detail-body">
+            <div style={s.body}>
               
               {currentSettingView === 'place' ? (
                 <>
-                  <div className="detail-info-card">
-                    <div className="detail-item">
-                      <span className="detail-label">PLACE NAME:</span>
-                      <span className="detail-value">{selectedItem.name}</span>
-                    </div>
+                  <div style={s.detailItem}>
+                    <span style={s.detailLabel}>PLACE NAME:</span>
+                    <span style={s.detailValue}>{selectedItem.name}</span>
                   </div>
 
-                  <div className="section-header">
-                    <h4>Associated Tasks</h4>
-                    <button className="btn-link" onClick={() => setShowQuickAdd(!showQuickAdd)}>+ Add Task</button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' }}>
+                    <h4 style={{ margin: 0, color: '#111827', fontSize: '1rem' }}>Associated Tasks</h4>
+                    <button style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 500, cursor: 'pointer' }} onClick={() => setShowQuickAdd(!showQuickAdd)}>+ Add Task</button>
                   </div>
 
-                  <table className="associated-table">
-                    <thead>
-                      <tr><th>TASK NAME</th><th style={{ width: '100px', textAlign: 'right' }}>ACTION</th></tr>
-                    </thead>
-                    <tbody>
-                      {tasks.filter(t => t.placeId === selectedItem.id).length === 0 && !showQuickAdd && (
-                        <tr><td colSpan={2} className="empty-cell" style={{padding: '20px'}}>No tasks linked.</td></tr>
-                      )}
-                      
-                      {tasks.filter(t => t.placeId === selectedItem.id).map(t => (
-                        <tr key={t.id}>
-                          <td>{t.name}</td>
-                          <td style={{ textAlign: 'right' }}><button className="btn-text-danger" onClick={() => confirmDeleteTask(t.id)}>Remove</button></td>
-                        </tr>
-                      ))}
+                  <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr><th style={thStyle}>TASK NAME</th><th style={{...thStyle, width: '100px', textAlign: 'right'}}>ACTION</th></tr>
+                      </thead>
+                      <tbody>
+                        {tasks.filter(t => t.placeId === selectedItem.id).length === 0 && !showQuickAdd && (
+                          <tr><td colSpan={2} style={{ padding: '20px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center' }}>No tasks linked.</td></tr>
+                        )}
+                        
+                        {tasks.filter(t => t.placeId === selectedItem.id).map(t => (
+                          <tr key={t.id}>
+                            <td style={tdStyle}>{t.name}</td>
+                            <td style={{...tdStyle, textAlign: 'right'}}><button style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 500, cursor: 'pointer' }} onClick={() => confirmDeleteTask(t.id)}>Remove</button></td>
+                          </tr>
+                        ))}
 
-                      {showQuickAdd && (
-                        <tr>
-                          <td><input type="text" className="white-input" style={{ width: '100%', padding: '6px 10px' }} placeholder="Type new task and press Enter..." value={newTaskInput} onChange={(e) => setNewTaskInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleQuickAddTask(); } }} autoFocus /></td>
-                          <td style={{ textAlign: 'right' }}><button className="btn-link" onClick={handleQuickAddTask}>Save</button></td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                        {showQuickAdd && (
+                          <tr>
+                            <td style={tdStyle}><input type="text" style={s.input} placeholder="Type new task and press Enter..." value={newTaskInput} onChange={(e) => setNewTaskInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleQuickAddTask(); } }} autoFocus /></td>
+                            <td style={{...tdStyle, textAlign: 'right'}}><button style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 500, cursor: 'pointer' }} onClick={handleQuickAddTask}>Save</button></td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </>
               ) : currentSettingView === 'tax' ? (
-                <div className="detail-item"><span className="detail-label">Current Tax</span><span className="detail-value">{selectedItem.percentage}%</span></div>
+                <div style={s.detailItem}><span style={s.detailLabel}>Current Tax</span><span style={s.detailValue}>{selectedItem.percentage}%</span></div>
               ) : (
                 <>
                   {currentSettingView === 'status' && (
-                    <div className="detail-item"><span className="detail-label">Order</span><span className="detail-value">{selectedItem.order}</span></div>
+                    <div style={s.detailItem}><span style={s.detailLabel}>Order</span><span style={s.detailValue}>{selectedItem.order}</span></div>
                   )}
                   {currentSettingView === 'task' && (
-                    <div className="detail-item"><span className="detail-label">Place</span><span className="detail-value">{places.find(p => p.id === selectedItem.placeId)?.name || 'Unknown'}</span></div>
+                    <div style={s.detailItem}><span style={s.detailLabel}>Place</span><span style={s.detailValue}>{places.find(p => p.id === selectedItem.placeId)?.name || 'Unknown'}</span></div>
                   )}
 
-                  <div className={`detail-item ${(currentSettingView === 'task' || currentSettingView === 'status') ? 'mt-16' : ''}`}>
-                    <span className="detail-label">
+                  <div style={s.detailItem}>
+                    <span style={s.detailLabel}>
                       {currentSettingView === 'task' ? 'Task Name' : currentSettingView === 'business' ? 'Business Name' : currentSettingView === 'payment' ? 'Payment Method' : 'Name'}
                     </span>
-                    <span className="detail-value">{selectedItem.name}</span>
+                    <span style={s.detailValue}>{selectedItem.name}</span>
                   </div>
 
                   {currentSettingView === 'product' && (
-                    <div className="detail-item mt-16"><span className="detail-label">Price</span><span className="detail-value">{selectedItem.price ? `$${Number(selectedItem.price).toFixed(2)}` : 'N/A'}</span></div>
+                    <div style={s.detailItem}><span style={s.detailLabel}>Price</span><span style={s.detailValue}>{selectedItem.price ? `$${Number(selectedItem.price).toFixed(2)}` : 'N/A'}</span></div>
                   )}
 
                   {currentSettingView === 'service' && (
-                    <div className="detail-item mt-16"><span className="detail-label">Estimated time (min)</span><span className="detail-value">{selectedItem.estimatedTime || 'N/A'}</span></div>
+                    <div style={s.detailItem}><span style={s.detailLabel}>Estimated time (min)</span><span style={s.detailValue}>{selectedItem.estimatedTime || 'N/A'}</span></div>
                   )}
 
                   {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && (
-                    <div className="detail-item mt-16"><span className="detail-label">Business</span><span className="detail-value">{selectedItem.business || 'N/A'}</span></div>
+                    <div style={s.detailItem}><span style={s.detailLabel}>Business</span><span style={s.detailValue}>{selectedItem.business || 'N/A'}</span></div>
                   )}
 
                   {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && (
-                    <div className="detail-item mt-16"><span className="detail-label">Color</span><div className="color-picker-wrapper mt-4"><span className="color-dot large" style={{ backgroundColor: selectedItem.color }}></span><span className="detail-value">{selectedItem.color.toUpperCase()}</span></div></div>
+                    <div style={s.detailItem}>
+                      <span style={s.detailLabel}>Color</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                        <span style={{ backgroundColor: selectedItem.color, width: '24px', height: '24px', borderRadius: '50%', display: 'inline-block' }}></span>
+                        <span style={{...s.detailValue, fontFamily: 'monospace'}}>{selectedItem.color.toUpperCase()}</span>
+                      </div>
+                    </div>
                   )}
                 </>
               )}
 
             </div>
             
-            <footer className={`modal-footer ${currentSettingView === 'tax' ? 'justify-end' : 'footer-layout-custom'}`}>
+            <footer style={{...s.footer, justifyContent: currentSettingView === 'tax' ? 'flex-end' : 'space-between'}}>
               {currentSettingView !== 'tax' && (
-                <button className="btn-danger-light" onClick={() => handleDeleteClick(selectedItem.id)}>
-                  Delete {activeSettingOption?.label}
+                <button style={s.btnDangerLight} onClick={() => handleDeleteClick(selectedItem.id)}>
+                  <Trash2 size={16}/> Delete {activeSettingOption?.label}
                 </button>
               )}
               
-              <div className="footer-right-group">
-                <button className="btn-text" onClick={() => setIsDetailModalOpen(false)}>Close</button>
-                <button className="btn-primary" onClick={() => handleOpenForm(selectedItem)}>
-                  Edit {activeSettingOption?.label}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button style={{...s.btnOutline, border: 'none'}} onClick={() => setIsDetailModalOpen(false)}>Close</button>
+                <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedItem)}>
+                  <Edit2 size={16}/> Edit {activeSettingOption?.label}
                 </button>
               </div>
             </footer>
@@ -609,13 +682,21 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
         </div>
       )}
 
-      {/* --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN --- */}
+      {/* --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN BLINDADO --- */}
       {isDeleteModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsDeleteModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <header className="modal-header"><h3>Confirm Deletion</h3><button className="btn-icon close" onClick={() => setIsDeleteModalOpen(false)}><X size={20} /></button></header>
-            <div className="modal-body"><p className="text-secondary">Are you sure you want to delete this record? This action cannot be undone.</p></div>
-            <footer className="modal-footer"><button className="btn-outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</button><button className="btn-primary danger-bg" onClick={confirmDelete}>Delete</button></footer>
+        <div style={s.overlay} onClick={() => setIsDeleteModalOpen(false)}>
+          <div style={s.modal} onClick={e => e.stopPropagation()}>
+            <header style={s.header}>
+              <h3 style={s.title}>Confirm Deletion</h3>
+              <button style={s.closeBtn} onClick={() => setIsDeleteModalOpen(false)}><X size={20} /></button>
+            </header>
+            <div style={s.body}>
+              <p style={{ color: '#6b7280', fontSize: '0.95rem', margin: 0, lineHeight: 1.5 }}>Are you sure you want to delete this record? This action cannot be undone.</p>
+            </div>
+            <footer style={{...s.footer, justifyContent: 'flex-end'}}>
+              <button style={s.btnOutline} onClick={() => setIsDeleteModalOpen(false)}>Cancel</button>
+              <button style={{...s.btnPrimary, backgroundColor: '#ef4444'}} onClick={confirmDelete}>Delete</button>
+            </footer>
           </div>
         </div>
       )}
