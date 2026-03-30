@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardCheck, X, Camera, MapPin, Search, CalendarDays, Activity, FileText, User // <-- CORRECCIÓN: Importamos el ícono User aquí
+  ClipboardCheck, X, Camera, MapPin, CalendarDays, Activity, FileText, User // Bórramos 'Search' de aquí
 } from 'lucide-react';
 import type { Property } from '../types';
 
@@ -45,18 +45,18 @@ const mockPastQCs: QCRecord[] = [
 
 interface QualityCheckViewProps {
   onOpenMenu: () => void;
-  properties: Property[];
+  properties: Property[]; // Lo mantenemos en la interfaz para que App.tsx no dé error al enviarlo
   houseToInspect: Property | null;
   clearHouseToInspect: () => void;
 }
 
-export default function QualityCheckView({ onOpenMenu, properties, houseToInspect, clearHouseToInspect }: QualityCheckViewProps) {
+// Eliminamos 'properties' de la desestructuración porque no se usa dentro del componente
+export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHouseToInspect }: QualityCheckViewProps) {
   const [qcList, setQcList] = useState<QCRecord[]>(mockPastQCs);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
 
   // Estructura de estado complejo para replicar tu HTML de AppScript
-  // { placeId: { tasks: { taskId: 'Yes'|'No' }, corrections: 'Yes'|'No', score: 1|2|3, notes: '', damage: '', photos: [] } }
   const [qcData, setQcData] = useState<Record<string, any>>({});
 
   // Efecto para abrir el modal si venimos de darle al botón "Check" en HousesView
@@ -128,7 +128,15 @@ export default function QualityCheckView({ onOpenMenu, properties, houseToInspec
     setQcData(prev => ({ ...prev, [placeId]: { ...prev[placeId], [field]: value } }));
   };
 
-  // Estilos Blindados para la Tabla y los Modales
+  // Función para formatear fechas consistentemente
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '-';
+    const [year, month, day] = dateString.split('-');
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  // --- Estilos Blindados ---
   const s = {
     th: { backgroundColor: '#f9fafb', padding: '12px 16px', color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb', textAlign: 'left' as const },
     td: { padding: '12px 16px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontSize: '0.95rem' },
@@ -182,7 +190,7 @@ export default function QualityCheckView({ onOpenMenu, properties, houseToInspec
             <tbody>
               {qcList.map((qc) => (
                 <tr key={qc.id} style={{ transition: 'background-color 0.2s', borderBottom: '1px solid #f1f5f9' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                  <td style={s.td}>{qc.date}</td>
+                  <td style={s.td}>{formatDate(qc.date)}</td>
                   <td style={{...s.td, fontWeight: 600}}>{qc.client}</td>
                   <td style={{...s.td, color: '#6b7280'}}>{qc.address}</td>
                   <td style={s.td}>
@@ -221,7 +229,7 @@ export default function QualityCheckView({ onOpenMenu, properties, houseToInspec
                   <ClipboardCheck size={22}/> Quality Check Inspection
                 </h1>
                 <p style={{ margin: '5px 0 0', fontSize: '0.95rem', opacity: 0.9 }}>
-                  ID House: <strong style={{backgroundColor: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: '4px'}}>{selectedHouse.id}</strong>
+                  ID House: <strong style={{backgroundColor: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: '4px'}}>&lt;&lt; {selectedHouse.id} &gt;&gt;</strong>
                 </p>
               </div>
               <button style={s.closeBtn} onClick={handleCloseForm}><X size={24} /></button>
