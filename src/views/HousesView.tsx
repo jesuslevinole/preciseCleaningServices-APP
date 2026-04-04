@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { 
-  Search, SlidersHorizontal, MapPin, BedDouble, Maximize, Plus, X, Edit2, Trash2,
-  Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck
+  Search, MapPin, Plus, X, Edit2, Trash2, 
+  Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
+  Bell, Briefcase, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import type { Property, Status, Team, Priority, Service } from '../types';
 
 const mockStatuses: Status[] = [
-  { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#4b5563' },
-  { id: '2', order: 2, name: 'NEEDS TO BE SCHEDULE', business: 'Regular', color: '#3b82f6' },
-  { id: '3', order: 3, name: 'SCHEDULE PENDING', business: 'Regular', color: '#f97316' },
-  { id: '4', order: 4, name: 'IN PROGRESS', business: 'Regular , Cavalry', color: '#a855f7' }
+  { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#3b82f6' }, 
+  { id: '2', order: 2, name: 'NEEDS TO BE SCHEDULE', business: 'Regular', color: '#8b5cf6' }, 
+  { id: '3', order: 3, name: 'SCHEDULE PENDING', business: 'Regular', color: '#ef4444' }, 
+  { id: '4', order: 4, name: 'IN PROGRESS', business: 'Regular , Cavalry', color: '#f59e0b' } 
 ].sort((a, b) => Number(a.order) - Number(b.order));
 
 const mockTeams: Team[] = [
-  { id: '1', name: 'Team test', business: '', color: '#f97316' },
-  { id: '2', name: 'Team Jesus', business: '', color: '#e5e7eb' },
+  { id: '1', name: 'Equipo A', business: '', color: '#10b981' },
+  { id: '2', name: 'Equipo B', business: '', color: '#f59e0b' },
+  { id: '3', name: 'Equipo C', business: '', color: '#9ca3af' },
 ];
 
 const mockPriorities: Priority[] = [
@@ -24,8 +26,10 @@ const mockPriorities: Priority[] = [
 ];
 
 const mockServices: Service[] = [
-  { id: 's1', name: 'Full', estimatedTime: '', business: '' },
-  { id: 's2', name: 'Light', estimatedTime: '120', business: '' }
+  { id: 's1', name: 'Deep Clean', estimatedTime: '', business: '' },
+  { id: 's2', name: 'Oficina', estimatedTime: '120', business: '' },
+  { id: 's3', name: 'Regular', estimatedTime: '90', business: '' },
+  { id: 's4', name: 'Move-Out', estimatedTime: '150', business: '' }
 ];
 
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
@@ -69,7 +73,6 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
   );
 };
 
-// Se añade onCheckHouse a la interfaz
 interface HousesViewProps {
   onOpenMenu: () => void;
   properties: Property[];
@@ -78,10 +81,8 @@ interface HousesViewProps {
 }
 
 export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse }: HousesViewProps) {
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(
-    mockStatuses.reduce((acc, s) => ({ ...acc, [s.id]: true }), {})
-  );
   
+  const [activeFilter, setActiveFilter] = useState('Todos');
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
@@ -110,16 +111,36 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
     btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
     closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex' },
+    
     detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
     detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', flex: '1 1 200px' } as React.CSSProperties,
     detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
     detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
     noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', flex: '1 1 100%' } as React.CSSProperties,
-    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', flex: '1 1 100%' } as React.CSSProperties
-  };
+    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', flex: '1 1 100%' } as React.CSSProperties,
 
-  const toggleSection = (id: string) => {
-    setExpandedSections(prev => ({ ...prev, [id]: !prev[id] }));
+    dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' },
+    kpiCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' },
+    kpiIconBox: (color: string) => ({ backgroundColor: `${color}15`, color: color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
+    mainColumns: { display: 'flex', gap: '24px', flexWrap: 'wrap' as const },
+    leftCol: { flex: '2 1 600px', display: 'flex', flexDirection: 'column' as const, gap: '24px', minWidth: 0 },
+    rightCol: { flex: '1 1 300px', display: 'flex', flexDirection: 'column' as const, gap: '24px', minWidth: 0 },
+    tableCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'hidden' },
+    tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' } as React.CSSProperties,
+    
+    // Mejoras Responsive en la Tabla: whiteSpace nowrap asegura que no se deforme
+    pillBtn: (active: boolean) => ({ padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: active ? '#10b981' : 'transparent', color: active ? 'white' : '#6b7280', transition: 'all 0.2s', whiteSpace: 'nowrap' as const }),
+    th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
+    td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const, whiteSpace: 'nowrap' as const },
+    
+    statusPill: (statusId: string) => {
+      let bg = '#dbeafe', color = '#3b82f6', text = 'Programado';
+      if (statusId === '4') { bg = '#fef3c7'; color = '#d97706'; text = 'En Proceso'; }
+      if (statusId === '2') { bg = '#ede9fe'; color = '#7c3aed'; text = 'QC'; }
+      if (statusId === '3') { bg = '#fee2e2'; color = '#dc2626'; text = 'Recall'; }
+      if (statusId === '5') { bg = '#dcfce7'; color = '#16a34a'; text = 'Completado'; }
+      return { bg, color, text };
+    }
   };
 
   const handleOpenForm = (house?: Property) => {
@@ -145,7 +166,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     if (selectedHouse) {
       setProperties(properties.map(p => p.id === selectedHouse.id ? { ...formData } : p));
     } else {
-      setProperties([...properties, { ...formData, id: Date.now().toString(), description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' }]);
+      setProperties([...properties, { ...formData, id: `J-${1040 + properties.length}`, description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' }]);
     }
     handleCloseForm();
   };
@@ -158,91 +179,219 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
   const roomOptions = [1,2,3,4,5].map(n => ({ id: String(n), name: String(n) }));
 
+  const today = new Date();
+  const dateFormatted = today.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateCapitalized = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1);
+
   return (
-    <div className="fade-in">
-      <header className="main-header">
+    <div className="fade-in" style={{ padding: '20px' }}>
+      
+      {/* HEADER TIPO DASHBOARD (Con clases CSS nuevas para Responsividad) */}
+      <header className="main-header dashboard-header-container">
         <div className="header-titles">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Abrir menú" style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }}>
+            <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Abrir menú">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
             </button>
-            <h1 style={{ margin: 0 }}>Houses</h1>
+            <h1 style={{ margin: 0, color: '#111827', fontSize: '1.8rem', fontWeight: 700 }}>Dashboard</h1>
           </div>
-          <p style={{ marginTop: '4px', color: '#6b7280' }}>{properties.length} active properties tracked</p>
+          <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>Vista general de operaciones</p>
         </div>
-        <div className="header-actions">
-          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 16px', height: '42px', transition: 'all 0.2s ease' }}>
-            <Search size={18} color="#64748b" />
-            <input type="text" placeholder="Search properties..." style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', padding: '10px', fontSize: '0.95rem', width: '250px', color: '#1e293b' }} />
+
+        <div className="dashboard-actions-wrapper">
+          <div className="search-box-container" style={{ display: 'flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '0 16px', height: '42px', flex: 1, minWidth: '200px' }}>
+            <Search size={16} color="#9ca3af" />
+            <input type="text" placeholder="Buscar trabajo..." style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', padding: '10px', fontSize: '0.9rem', width: '100%', color: '#111827' }} />
           </div>
-          <button className="btn-filter" style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '0 16px', height: '42px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, color: '#111827' }}><SlidersHorizontal size={16} /> Filters</button>
-          <button className="btn-primary" onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '8px', fontWeight: 500, cursor: 'pointer' }}><Plus size={18} /> Add House</button>
+          <button className="bell-btn-mobile" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6b7280', flexShrink: 0 }}>
+            <Bell size={18} />
+          </button>
+          <button className="add-btn-mobile" onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0 }}>
+            <Plus size={16} /> Nuevo Trabajo
+          </button>
         </div>
       </header>
 
-      <div className="status-summary-grid">
-        {mockStatuses.map(status => {
-          const count = properties.filter(p => p.statusId === status.id).length;
-          return (
-            <div key={`summary-${status.id}`} className="status-summary-card" style={{ borderTopColor: status.color }}>
-              <div className="status-summary-title">{status.name}</div>
-              <div className="status-summary-count" style={{ color: count > 0 ? '#111827' : '#cbd5e1' }}>{count}</div>
-            </div>
-          );
-        })}
+      {/* KPI CARDS SUPERIORES */}
+      <div className="dash-grid">
+        <div style={s.kpiCard}>
+          <div style={s.kpiIconBox('#10b981')}><Briefcase size={22} /></div>
+          <div>
+            <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>Trabajos hoy</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{properties.length}</div>
+            <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>+3 vs ayer</div>
+          </div>
+        </div>
+        <div style={s.kpiCard}>
+          <div style={s.kpiIconBox('#f59e0b')}><Clock size={22} /></div>
+          <div>
+            <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>En Proceso</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{properties.filter(p => p.statusId === '4').length}</div>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>2 equipos activos</div>
+          </div>
+        </div>
+        <div style={s.kpiCard}>
+          <div style={s.kpiIconBox('#8b5cf6')}><ShieldCheck size={22} /></div>
+          <div>
+            <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>QC Pendiente</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{properties.filter(p => p.statusId === '2').length}</div>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Esperando revisión</div>
+          </div>
+        </div>
+        <div style={s.kpiCard}>
+          <div style={s.kpiIconBox('#ef4444')}><AlertTriangle size={22} /></div>
+          <div>
+            <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>Recalls</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{properties.filter(p => p.statusId === '3').length}</div>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Esta semana</div>
+          </div>
+        </div>
       </div>
 
-      {mockStatuses.map(status => {
-        const statusProperties = properties.filter(p => p.statusId === status.id);
-        if (statusProperties.length === 0) return null; 
-        const isExpanded = expandedSections[status.id];
-
-        return (
-          <div key={`section-${status.id}`} className="accordion-section-wrapper" style={{ marginBottom: '32px' }}>
-            <div className="accordion-header" onClick={() => toggleSection(status.id)}>
-              <button className={`accordion-toggle ${isExpanded ? 'expanded' : ''}`}>V</button>
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0, fontSize: '1.05rem' }}>
-                <span className="color-dot" style={{ backgroundColor: status.color }}></span>
-                {status.order} - {status.name}
-              </h2>
-              <span className="count-pill" style={{ backgroundColor: status.color + '20', color: status.color }}>{statusProperties.length}</span>
+      {/* CONTENIDO PRINCIPAL A 2 COLUMNAS */}
+      <div className="main-columns">
+        
+        {/* COLUMNA IZQUIERDA: TRABAJOS DEL DÍA */}
+        <div className="left-col">
+          <div style={s.tableCard}>
+            <div style={s.tableHeader}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Trabajos del Día</h2>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
+              </div>
+              
+              {/* Contenedor de filtros deslizable para móviles */}
+              <div className="dashboard-filters">
+                <button onClick={() => setActiveFilter('Todos')} style={s.pillBtn(activeFilter === 'Todos')}>Todos</button>
+                <button onClick={() => setActiveFilter('Programado')} style={s.pillBtn(activeFilter === 'Programado')}>Programado</button>
+                <button onClick={() => setActiveFilter('En Proceso')} style={s.pillBtn(activeFilter === 'En Proceso')}>En Proceso</button>
+                <button onClick={() => setActiveFilter('QC')} style={s.pillBtn(activeFilter === 'QC')}>QC</button>
+              </div>
             </div>
 
-            <div className={`cards-grid ${isExpanded ? 'expanded' : 'collapsed'}`}>
-              {statusProperties.map((prop) => (
-                <div key={prop.id} className={`property-card ${prop.borderColorClass || ''}`} onClick={() => handleOpenDetail(prop)} style={{ cursor: 'pointer', position: 'relative' }}>
-                  <div className="card-header">
-                    <input type="radio" name="property-select" onClick={(e) => e.stopPropagation()} />
-                    {prop.tag && <span className={`tag ${prop.tag.type}`}>{prop.tag.text}</span>}
-                  </div>
-                  <h3 className="card-address">{prop.address}</h3>
-                  <div className="card-pills">
-                    <span className="pill"><MapPin size={14} /> {prop.city || 'TBD'}</span>
-                    <span className="pill"><BedDouble size={14} /> {prop.rooms || 0} Beds</span>
-                    <span className="pill"><Maximize size={14} /> {prop.size || 'TBD'}</span>
-                  </div>
-                  <p className="card-desc">{prop.description}</p>
-                  {prop.bottomNote && <div className="card-bottom-note">{prop.bottomNote}</div>}
-                  
-                  {/* NUEVO BOTÓN "CHECK" EN LA TARJETA */}
-                  <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
-                     <button 
-                       onClick={(e) => { e.stopPropagation(); onCheckHouse(prop); }}
-                       style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
-                     >
-                       <ClipboardCheck size={16} /> Check
-                     </button>
-                  </div>
-                </div>
-              ))}
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
+                <thead>
+                  <tr>
+                    <th style={s.th}>ID</th>
+                    <th style={s.th}>CLIENTE</th>
+                    <th style={s.th}>HORA</th>
+                    <th style={s.th}>TIPO</th>
+                    <th style={s.th}>EQUIPO</th>
+                    <th style={s.th}>ESTADO</th>
+                    <th style={{...s.th, textAlign: 'right'}}>ACCIÓN</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {properties.map((prop, idx) => {
+                    const statusInfo = s.statusPill(prop.statusId);
+                    const teamName = mockTeams.find(t => t.id === prop.teamId)?.name || 'Sin Asignar';
+                    const serviceName = mockServices.find(srv => srv.id === prop.serviceId)?.name || 'Regular';
+                    const mockId = prop.id.length > 5 ? prop.id.substring(0, 6) : `J-104${idx+2}`;
+
+                    return (
+                      <tr 
+                        key={prop.id} 
+                        onClick={() => handleOpenDetail(prop)}
+                        style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <td style={{...s.td, color: '#6b7280', fontSize: '0.85rem', fontFamily: 'monospace'}}>{mockId}</td>
+                        <td style={s.td}>
+                          <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{prop.client}</div>
+                          <div style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <MapPin size={12} /> {prop.address}
+                          </div>
+                        </td>
+                        <td style={{...s.td, color: '#6b7280'}}><Clock size={14} style={{display: 'inline', marginRight: '4px', verticalAlign: 'middle'}}/> {prop.timeIn || '08:00 AM'}</td>
+                        <td style={{...s.td, fontWeight: 500}}>{serviceName}</td>
+                        <td style={{...s.td, color: '#6b7280'}}>{teamName}</td>
+                        <td style={s.td}>
+                          <span style={{ backgroundColor: statusInfo.bg, color: statusInfo.color, padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusInfo.color }}></span>
+                            {statusInfo.text}
+                          </span>
+                        </td>
+                        <td style={{...s.td, textAlign: 'right'}}>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); onCheckHouse(prop); }}
+                            style={{ background: 'none', border: '1px solid #e5e7eb', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', color: '#111827', fontWeight: 600, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#3b82f6'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#111827'; }}
+                          >
+                            <ClipboardCheck size={14}/> Check
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
-        );
-      })}
+        </div>
 
+        {/* COLUMNA DERECHA: EQUIPOS ACTIVOS */}
+        <div className="right-col">
+          <div style={{...s.tableCard, padding: '20px'}}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Equipos Activos</h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}><Users size={18}/></div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Equipo A</div>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Garcia Family - QC</div>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 }}>3 miembros</span>
+                </div>
+                <div style={{ width: '100%', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', marginTop: '12px' }}>
+                  <div style={{ width: '85%', height: '100%', backgroundColor: '#10b981', borderRadius: '2px' }}></div>
+                </div>
+              </div>
+
+              <div style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}><Users size={18}/></div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Equipo B</div>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Downtown Office Co.</div>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 }}>2 miembros</span>
+                </div>
+                <div style={{ width: '100%', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', marginTop: '12px' }}>
+                  <div style={{ width: '45%', height: '100%', backgroundColor: '#f59e0b', borderRadius: '2px' }}></div>
+                </div>
+              </div>
+
+              <div style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: 'white' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}><Users size={18}/></div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Equipo C</div>
+                      <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Sin asignar</div>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 500 }}>3 miembros</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* --- MODAL DE FORMULARIO BLINDADO --- */}
       {isFormModalOpen && (
-        <div style={s.overlay} onClick={handleCloseForm}>
-          <div style={s.modalWide} onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={handleCloseForm}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>{selectedHouse ? 'Edit Property Details' : 'Register New Property'}</h3>
               <button style={s.closeBtn} onClick={handleCloseForm}><X size={20} /></button>
@@ -365,9 +514,10 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
       )}
 
+      {/* --- MODAL DE DETALLES BLINDADO --- */}
       {isDetailModalOpen && selectedHouse && (
-        <div style={s.overlay} onClick={() => setIsDetailModalOpen(false)}>
-          <div style={s.modalWide} onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => setIsDetailModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
               <button style={s.closeBtn} onClick={() => setIsDetailModalOpen(false)}><X size={20} /></button>

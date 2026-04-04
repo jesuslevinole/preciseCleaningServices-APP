@@ -117,7 +117,7 @@
   background-color: transparent; 
   border: none; 
   outline: none; 
-  padding: 10px 10px 10px 36px; /* Espacio para el icono si es absoluto */
+  padding: 10px 10px 10px 36px;
   font-size: 0.95rem; 
   width: 100%; 
   color: var(--text-primary); 
@@ -199,79 +199,81 @@
 .btn-outline:hover { background-color: var(--bg-gray); }
 
 /* =========================================
+   DASHBOARD & LAYOUTS (NUEVO RESPONSIVO)
+   ========================================= */
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 24px; }
+.main-columns { display: flex; gap: 24px; flex-wrap: wrap; }
+.left-col { flex: 2 1 600px; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.right-col { flex: 1 1 300px; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+
+/* Contenedores para hacer la cabecera adaptable */
+.dashboard-actions-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Filtros deslizables en móvil */
+.dashboard-filters {
+  display: flex;
+  gap: 6px;
+  background-color: #f8fafc;
+  padding: 6px;
+  border-radius: 24px;
+  border: 1px solid #f1f5f9;
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+}
+.dashboard-filters::-webkit-scrollbar { display: none; /* Safari y Chrome */ }
+
+/* =========================================
    MEDIA QUERIES (DISEÑO RESPONSIVO)
    ========================================= */
 
 @media (max-width: 1024px) {
   /* Habilitar botón de menú desde iPad en vertical */
-  .mobile-menu-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
+  .mobile-menu-btn { display: flex; align-items: center; justify-content: center; }
 
   /* Sidebar Fixed para que no empuje el contenido */
-  .sidebar {
-    position: fixed; 
-    height: 100vh;
-    left: 0;
-    top: 0;
-    transform: translateX(-100%);
-    z-index: 1000; 
-  }
+  .sidebar { position: fixed; height: 100vh; left: 0; top: 0; transform: translateX(-100%); z-index: 1000; }
+  .sidebar.open { transform: translateX(0); width: 320px; box-shadow: 4px 0 25px rgba(0,0,0,0.15); }
+  .sidebar.collapsed { transform: translateX(-100%); }
   
-  .sidebar.open {
-    transform: translateX(0);
-    width: 320px; /* Ancho fijo para iPad */
-    box-shadow: 4px 0 25px rgba(0,0,0,0.15);
-  }
+  .main-content { padding: 20px; }
   
-  .sidebar.collapsed {
-    transform: translateX(-100%); 
-  }
-  
-  .main-content {
-    padding: 20px; 
-  }
+  /* Cabecera del Dashboard responsiva para iPad */
+  .dashboard-header-container { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .dashboard-actions-wrapper { width: 100%; }
+  .search-box-container { flex: 1; }
 
-  .main-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
+  /* Forzamos que las columnas del Dashboard se apilen en iPad Vertical y Celulares */
+  .left-col, .right-col { flex: 1 1 100%; }
   
-  /* Alineación del Título y el Botón de menú */
-  .header-titles {
-    flex-direction: row;
-    justify-content: space-between;
-    width: 100%;
-    align-items: center;
-  }
-  
-  .header-actions {
-    justify-content: space-between;
-    margin-top: 16px;
-  }
-  
-  .search-box input { width: 100%; }
+  /* Ajuste de los KPIs a 2 columnas en Tablets */
+  .dash-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 768px) {
   /* En teléfonos móviles el menú ocupa toda la pantalla */
-  .sidebar.open {
-    width: 100%; 
-    box-shadow: none;
-  }
+  .sidebar.open { width: 100%; box-shadow: none; }
+  .main-content { padding: 16px; }
 
-  .main-content {
-    padding: 16px; 
-  }
+  /* Cabecera de vista general en móviles */
+  .main-header { flex-direction: column; align-items: stretch; gap: 16px; margin-bottom: 20px;}
+  .header-titles { flex-direction: row; justify-content: space-between; width: 100%; align-items: center; }
+  .dashboard-actions-wrapper { flex-wrap: wrap; gap: 12px; }
+  .search-box-container { width: 100%; order: 1; }
+  
+  /* El botón Add pasa abajo junto a la campana */
+  .add-btn-mobile { flex: 1; justify-content: center; order: 2; }
+  .bell-btn-mobile { order: 3; }
 
-  .header-actions {
-    gap: 8px;
-  }
-
-  .btn-filter, .btn-primary {
-    padding: 0 12px;
-    font-size: 0.9rem;
-  }
+  /* Ajustar grid del dashboard para móviles pequeños */
+  .dash-grid { grid-template-columns: 1fr; gap: 12px;}
+  
+  /* Modales ocupan casi toda la pantalla en móvil */
+  .modalWide, .modal-content { max-height: 95vh; margin: 10px; }
+  .modal-overlay { padding: 10px; }
 }
