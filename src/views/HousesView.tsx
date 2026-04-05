@@ -1,16 +1,16 @@
 import { useState } from 'react';
-import {
-  Search, MapPin, Plus, X, Edit2, Trash2,
+import { 
+  Search, MapPin, Plus, X, Edit2, Trash2, 
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
   Bell, Briefcase, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import type { Property, Status, Team, Priority, Service } from '../types';
 
 const mockStatuses: Status[] = [
-  { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#3b82f6' },
-  { id: '2', order: 2, name: 'NEEDS TO BE SCHEDULE', business: 'Regular', color: '#8b5cf6' },
-  { id: '3', order: 3, name: 'SCHEDULE PENDING', business: 'Regular', color: '#ef4444' },
-  { id: '4', order: 4, name: 'IN PROGRESS', business: 'Regular , Cavalry', color: '#f59e0b' }
+  { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#3b82f6' }, 
+  { id: '2', order: 2, name: 'NEEDS TO BE SCHEDULE', business: 'Regular', color: '#8b5cf6' }, 
+  { id: '3', order: 3, name: 'SCHEDULE PENDING', business: 'Regular', color: '#ef4444' }, 
+  { id: '4', order: 4, name: 'IN PROGRESS', business: 'Regular , Cavalry', color: '#f59e0b' } 
 ].sort((a, b) => Number(a.order) - Number(b.order));
 
 const mockTeams: Team[] = [
@@ -39,7 +39,7 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
 
   return (
     <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
-      <div
+      <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', position: 'relative' }}
       >
@@ -57,8 +57,8 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
             None / Unassigned
           </div>
           {options.map((o: any) => (
-            <div
-              key={o.id}
+            <div 
+              key={o.id} 
               style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
               onMouseDown={(e) => { e.preventDefault(); onChange(o.id); setIsOpen(false); }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
@@ -82,7 +82,7 @@ interface HousesViewProps {
 }
 
 export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse }: HousesViewProps) {
-
+  
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -92,10 +92,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     id: '', statusId: '', invoiceStatus: '', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: ''
   });
 
-  // --- ESTILOS BLINDADOS (DASHBOARD + GRID MODALES) ---
+  // --- ESTILOS INLINE BLINDADOS ---
   const s = {
-    overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', overflowY: 'auto', boxSizing: 'border-box' } as React.CSSProperties,
-
     // Modales de Layout Base
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
@@ -186,18 +184,35 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   return (
     <div className="fade-in" style={{ padding: '20px' }}>
 
-      {/* INYECCIÓN DE ESTILOS ESTRATÉGICOS (Grid de 3 columnas, Tabla móvil y Modal al 70%) */}
+      {/* INYECCIÓN DE ESTILOS ESTRATÉGICOS */}
       <style>{`
-        /* Modal Dinámico (70% en PC, 95% en Móvil) */
+        /* Overlay Centrado Absoluto: Reemplaza cualquier clase previa propensa a fallos */
+        .modal-overlay-centered {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(15, 23, 42, 0.6);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+          padding: 20px;
+        }
+
+        /* Modal Dinámico (70% en PC, 95% en Móvil) perfectamente centrado */
         .modal-70 {
           background-color: #ffffff;
           width: 70%;
           max-width: 1200px;
           border-radius: 12px;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
           display: flex;
           flex-direction: column;
           max-height: 90vh;
+          margin: auto;
         }
 
         /* Rejilla Perfecta de 3 Columnas */
@@ -449,7 +464,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       {/* --- MODAL DE FORMULARIO (70% WIDTH & 3 COLUMN GRID) --- */}
       {isFormModalOpen && (
-        <div className="modal-overlay" onClick={handleCloseForm}>
+        <div className="modal-overlay-centered" onClick={handleCloseForm}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>{selectedHouse ? 'Edit Property Details' : 'Register New Property'}</h3>
@@ -533,8 +548,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   <label style={s.label}>Rooms</label>
                   <CustomSelect options={roomOptions} value={formData.rooms} onChange={(val: string) => setFormData({ ...formData, rooms: val })} placeholder="Rooms..." icon={Hash} />
                 </div>
-
-                {/* Fila 5: Baños y Textareas que ocupan todo el ancho */}
+                
+                {/* Fila 5 */}
                 <div>
                   <label style={s.label}>Bathrooms</label>
                   <CustomSelect options={roomOptions} value={formData.bathrooms} onChange={(val: string) => setFormData({ ...formData, bathrooms: val })} placeholder="Bathrooms..." icon={Hash} />
@@ -558,7 +573,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
               </div>
             </div>
-
+            
             <footer style={s.footer}>
               <button style={s.btnOutline} onClick={handleCloseForm}>Cancel</button>
               <button style={s.btnPrimary} onClick={handleSave}>Save Property</button>
@@ -569,7 +584,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       {/* --- MODAL DE DETALLES (70% WIDTH & 3 COLUMN GRID) --- */}
       {isDetailModalOpen && selectedHouse && (
-        <div className="modal-overlay" onClick={() => setIsDetailModalOpen(false)}>
+        <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
