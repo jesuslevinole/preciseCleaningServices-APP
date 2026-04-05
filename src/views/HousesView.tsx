@@ -1,16 +1,16 @@
 import { useState } from 'react';
-import { 
-  Search, MapPin, Plus, X, Edit2, Trash2, 
+import {
+  Search, MapPin, Plus, X, Edit2, Trash2,
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
   Bell, Briefcase, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import type { Property, Status, Team, Priority, Service } from '../types';
 
 const mockStatuses: Status[] = [
-  { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#3b82f6' }, 
-  { id: '2', order: 2, name: 'NEEDS TO BE SCHEDULE', business: 'Regular', color: '#8b5cf6' }, 
-  { id: '3', order: 3, name: 'SCHEDULE PENDING', business: 'Regular', color: '#ef4444' }, 
-  { id: '4', order: 4, name: 'IN PROGRESS', business: 'Regular , Cavalry', color: '#f59e0b' } 
+  { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#3b82f6' },
+  { id: '2', order: 2, name: 'NEEDS TO BE SCHEDULE', business: 'Regular', color: '#8b5cf6' },
+  { id: '3', order: 3, name: 'SCHEDULE PENDING', business: 'Regular', color: '#ef4444' },
+  { id: '4', order: 4, name: 'IN PROGRESS', business: 'Regular , Cavalry', color: '#f59e0b' }
 ].sort((a, b) => Number(a.order) - Number(b.order));
 
 const mockTeams: Team[] = [
@@ -32,13 +32,14 @@ const mockServices: Service[] = [
   { id: 's4', name: 'Move-Out', estimatedTime: '150', business: '' }
 ];
 
+// Selector personalizado y responsivo
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const selected = options.find((o: any) => o.id === value);
 
   return (
     <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
-      <div 
+      <div
         onClick={() => setIsOpen(!isOpen)}
         style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', position: 'relative' }}
       >
@@ -56,8 +57,8 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
             None / Unassigned
           </div>
           {options.map((o: any) => (
-            <div 
-              key={o.id} 
+            <div
+              key={o.id}
               style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
               onMouseDown={(e) => { e.preventDefault(); onChange(o.id); setIsOpen(false); }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
@@ -81,7 +82,7 @@ interface HousesViewProps {
 }
 
 export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse }: HousesViewProps) {
-  
+
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -91,54 +92,53 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     id: '', statusId: '', invoiceStatus: '', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: ''
   });
 
+  // --- ESTILOS BLINDADOS (DASHBOARD + GRID MODALES) ---
   const s = {
     overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', overflowY: 'auto', boxSizing: 'border-box' } as React.CSSProperties,
-    modalWide: { backgroundColor: '#ffffff', width: '100%', maxWidth: '950px', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' } as React.CSSProperties,
+
+    // Modales de Layout Base
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
-    title: { fontSize: '1.15rem', fontWeight: 600, color: '#111827', margin: 0 },
+    title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
     body: { padding: '30px', overflowY: 'auto' } as React.CSSProperties,
     footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
-    flexRow: { display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' } as React.CSSProperties,
-    flex1: { flex: '1 1 250px', display: 'flex', flexDirection: 'column', gap: '6px' } as React.CSSProperties,
-    flex2: { flex: '2 1 500px', display: 'flex', flexDirection: 'column', gap: '6px' } as React.CSSProperties,
-    flexFull: { flex: '1 1 100%', display: 'flex', flexDirection: 'column', gap: '6px' } as React.CSSProperties,
-    label: { fontSize: '0.9rem', color: '#6b7280', fontWeight: 500 },
+
+    // Controles de Formulario
+    label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' } as React.CSSProperties,
     inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', width: '100%' } as React.CSSProperties,
     icon: { position: 'absolute', left: '14px', color: '#6b7280', pointerEvents: 'none' } as React.CSSProperties,
-    input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' } as React.CSSProperties,
-    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
-    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
-    btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
-    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex' },
-    
+    input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s' } as React.CSSProperties,
+
+    // Botones
+    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
+    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
+    btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
+    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' },
+
+    // Estilos del Modal de Detalles
     detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
-    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', flex: '1 1 200px' } as React.CSSProperties,
+    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } as React.CSSProperties,
     detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
     detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
-    noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', flex: '1 1 100%' } as React.CSSProperties,
-    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', flex: '1 1 100%' } as React.CSSProperties,
+    noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
+    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', width: '100%' } as React.CSSProperties,
 
+    // Dashboard Base
     dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' },
     kpiCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' },
     kpiIconBox: (color: string) => ({ backgroundColor: `${color}15`, color: color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
     mainColumns: { display: 'flex', gap: '24px', flexWrap: 'wrap' as const },
-    leftCol: { flex: '2 1 600px', display: 'flex', flexDirection: 'column' as const, gap: '24px', minWidth: 0 },
-    rightCol: { flex: '1 1 300px', display: 'flex', flexDirection: 'column' as const, gap: '24px', minWidth: 0 },
-    tableCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'hidden' },
     tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' } as React.CSSProperties,
-    
-    // Mejoras Responsive en la Tabla: whiteSpace nowrap asegura que no se deforme
     pillBtn: (active: boolean) => ({ padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: active ? '#10b981' : 'transparent', color: active ? 'white' : '#6b7280', transition: 'all 0.2s', whiteSpace: 'nowrap' as const }),
+
+    // Tabla Configuración
     th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
-    td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const, whiteSpace: 'nowrap' as const },
-    
+    td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
     statusPill: (statusId: string) => {
       let bg = '#dbeafe', color = '#3b82f6', text = 'Programado';
       if (statusId === '4') { bg = '#fef3c7'; color = '#d97706'; text = 'En Proceso'; }
       if (statusId === '2') { bg = '#ede9fe'; color = '#7c3aed'; text = 'QC'; }
       if (statusId === '3') { bg = '#fee2e2'; color = '#dc2626'; text = 'Recall'; }
-      if (statusId === '5') { bg = '#dcfce7'; color = '#16a34a'; text = 'Completado'; }
       return { bg, color, text };
     }
   };
@@ -177,7 +177,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   };
 
   const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
-  const roomOptions = [1,2,3,4,5].map(n => ({ id: String(n), name: String(n) }));
+  const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
 
   const today = new Date();
   const dateFormatted = today.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -185,8 +185,81 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   return (
     <div className="fade-in" style={{ padding: '20px' }}>
-      
-      {/* HEADER TIPO DASHBOARD (Con clases CSS nuevas para Responsividad) */}
+
+      {/* INYECCIÓN DE ESTILOS ESTRATÉGICOS (Grid de 3 columnas, Tabla móvil y Modal al 70%) */}
+      <style>{`
+        /* Modal Dinámico (70% en PC, 95% en Móvil) */
+        .modal-70 {
+          background-color: #ffffff;
+          width: 70%;
+          max-width: 1200px;
+          border-radius: 12px;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+          display: flex;
+          flex-direction: column;
+          max-height: 90vh;
+        }
+
+        /* Rejilla Perfecta de 3 Columnas */
+        .grid-3-cols {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 24px;
+          margin-bottom: 24px;
+        }
+        
+        /* El elemento ocupa todo el ancho del grid */
+        .col-span-full { grid-column: 1 / -1; }
+
+        /* Conversión de Tabla a Tarjetas (Mobile First) */
+        @media (max-width: 768px) {
+          .modal-70 { width: 95%; margin: 10px; }
+          .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
+          
+          /* Esconder cabecera real de tabla */
+          .responsive-table thead { display: none; }
+          
+          /* Convertir fila en tarjeta vertical */
+          .responsive-table tr {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            padding: 16px;
+            background: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+          }
+          
+          /* Convertir celda en renglón flex (label a la izquierda, valor a la derecha) */
+          .responsive-table td {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f1f5f9;
+            text-align: right;
+            white-space: normal !important;
+          }
+          
+          .responsive-table td:last-child { border-bottom: none; padding-bottom: 0; }
+          
+          /* Etiqueta inyectada dinámicamente desde el HTML */
+          .responsive-table td::before {
+            content: attr(data-label);
+            font-weight: 700;
+            color: #6b7280;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+
+          /* Ajustes en los detalles del cliente para que no se amontone */
+          .mobile-client-cell { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+        }
+      `}</style>
+
+      {/* HEADER TIPO DASHBOARD */}
       <header className="main-header dashboard-header-container">
         <div className="header-titles">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -250,17 +323,17 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       {/* CONTENIDO PRINCIPAL A 2 COLUMNAS */}
       <div className="main-columns">
-        
+
         {/* COLUMNA IZQUIERDA: TRABAJOS DEL DÍA */}
         <div className="left-col">
-          <div style={s.tableCard}>
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
             <div style={s.tableHeader}>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Trabajos del Día</h2>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
-              
-              {/* Contenedor de filtros deslizable para móviles */}
+
+              {/* Filtros */}
               <div className="dashboard-filters">
                 <button onClick={() => setActiveFilter('Todos')} style={s.pillBtn(activeFilter === 'Todos')}>Todos</button>
                 <button onClick={() => setActiveFilter('Programado')} style={s.pillBtn(activeFilter === 'Programado')}>Programado</button>
@@ -269,17 +342,18 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
-            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
+            {/* TABLA RESPONSIVA (Modo Tarjetas en Móvil) */}
+            <div style={{ overflowX: 'auto', padding: '10px 20px 20px 20px' }}>
+              <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '100%' }}>
                 <thead>
                   <tr>
                     <th style={s.th}>ID</th>
-                    <th style={s.th}>CLIENTE</th>
-                    <th style={s.th}>HORA</th>
-                    <th style={s.th}>TIPO</th>
-                    <th style={s.th}>EQUIPO</th>
-                    <th style={s.th}>ESTADO</th>
-                    <th style={{...s.th, textAlign: 'right'}}>ACCIÓN</th>
+                    <th style={s.th}>Cliente</th>
+                    <th style={s.th}>Hora</th>
+                    <th style={s.th}>Tipo</th>
+                    <th style={s.th}>Equipo</th>
+                    <th style={s.th}>Estado</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>Acción</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -287,40 +361,38 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     const statusInfo = s.statusPill(prop.statusId);
                     const teamName = mockTeams.find(t => t.id === prop.teamId)?.name || 'Sin Asignar';
                     const serviceName = mockServices.find(srv => srv.id === prop.serviceId)?.name || 'Regular';
-                    const mockId = prop.id.length > 5 ? prop.id.substring(0, 6) : `J-104${idx+2}`;
+                    const mockId = prop.id.length > 5 ? prop.id.substring(0, 6) : `J-104${idx + 2}`;
 
                     return (
-                      <tr 
-                        key={prop.id} 
+                      <tr
+                        key={prop.id}
                         onClick={() => handleOpenDetail(prop)}
                         style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
-                        <td style={{...s.td, color: '#6b7280', fontSize: '0.85rem', fontFamily: 'monospace'}}>{mockId}</td>
-                        <td style={s.td}>
-                          <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{prop.client}</div>
-                          <div style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <MapPin size={12} /> {prop.address}
+                        <td data-label="ID" style={{ ...s.td, color: '#6b7280', fontSize: '0.85rem', fontFamily: 'monospace' }}>{mockId}</td>
+                        <td data-label="Cliente" style={s.td}>
+                          <div className="mobile-client-cell">
+                            <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{prop.client}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <MapPin size={12} /> {prop.address}
+                            </div>
                           </div>
                         </td>
-                        <td style={{...s.td, color: '#6b7280'}}><Clock size={14} style={{display: 'inline', marginRight: '4px', verticalAlign: 'middle'}}/> {prop.timeIn || '08:00 AM'}</td>
-                        <td style={{...s.td, fontWeight: 500}}>{serviceName}</td>
-                        <td style={{...s.td, color: '#6b7280'}}>{teamName}</td>
-                        <td style={s.td}>
+                        <td data-label="Hora" style={{ ...s.td, color: '#6b7280' }}><Clock size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} /> {prop.timeIn || '08:00 AM'}</td>
+                        <td data-label="Tipo" style={{ ...s.td, fontWeight: 500 }}>{serviceName}</td>
+                        <td data-label="Equipo" style={{ ...s.td, color: '#6b7280' }}>{teamName}</td>
+                        <td data-label="Estado" style={s.td}>
                           <span style={{ backgroundColor: statusInfo.bg, color: statusInfo.color, padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusInfo.color }}></span>
                             {statusInfo.text}
                           </span>
                         </td>
-                        <td style={{...s.td, textAlign: 'right'}}>
-                          <button 
+                        <td data-label="Acción" style={{ ...s.td, textAlign: 'right' }}>
+                          <button
                             onClick={(e) => { e.stopPropagation(); onCheckHouse(prop); }}
                             style={{ background: 'none', border: '1px solid #e5e7eb', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', color: '#111827', fontWeight: 600, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
-                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#3b82f6'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#111827'; }}
                           >
-                            <ClipboardCheck size={14}/> Check
+                            <ClipboardCheck size={14} /> Check
                           </button>
                         </td>
                       </tr>
@@ -334,14 +406,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
         {/* COLUMNA DERECHA: EQUIPOS ACTIVOS */}
         <div className="right-col">
-          <div style={{...s.tableCard, padding: '20px'}}>
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', padding: '20px' }}>
             <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Equipos Activos</h3>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}><Users size={18}/></div>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}><Users size={18} /></div>
                     <div>
                       <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Equipo A</div>
                       <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Garcia Family - QC</div>
@@ -357,7 +429,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               <div style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}><Users size={18}/></div>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}><Users size={18} /></div>
                     <div>
                       <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Equipo B</div>
                       <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Downtown Office Co.</div>
@@ -369,143 +441,124 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   <div style={{ width: '45%', height: '100%', backgroundColor: '#f59e0b', borderRadius: '2px' }}></div>
                 </div>
               </div>
-
-              <div style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: 'white' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}><Users size={18}/></div>
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Equipo C</div>
-                      <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Sin asignar</div>
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 500 }}>3 miembros</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
 
       </div>
 
-      {/* --- MODAL DE FORMULARIO BLINDADO --- */}
+      {/* --- MODAL DE FORMULARIO (70% WIDTH & 3 COLUMN GRID) --- */}
       {isFormModalOpen && (
         <div className="modal-overlay" onClick={handleCloseForm}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-70" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>{selectedHouse ? 'Edit Property Details' : 'Register New Property'}</h3>
-              <button style={s.closeBtn} onClick={handleCloseForm}><X size={20} /></button>
+              <button style={s.closeBtn} onClick={handleCloseForm}><X size={24} /></button>
             </header>
-            
+
             <div style={s.body}>
-              <div style={s.flexRow}>
-                <div style={s.flex1}>
+              {/* Estructura CSS Grid */}
+              <div className="grid-3-cols">
+
+                {/* Fila 1 */}
+                <div>
                   <label style={s.label}>Client</label>
                   <div style={s.inputWrapper}>
                     <User style={s.icon} size={16} />
-                    <input type="text" style={s.input} placeholder="Type client name..." value={formData.client} onChange={e => setFormData({...formData, client: e.target.value})} />
+                    <input type="text" style={s.input} placeholder="Type client name..." value={formData.client} onChange={e => setFormData({ ...formData, client: e.target.value })} />
                   </div>
                 </div>
-                <div style={s.flex2}>
-                  <label style={s.label}>Address <span style={{color: '#3b82f6'}}>*</span></label>
+                <div>
+                  <label style={s.label}>Address <span style={{ color: '#3b82f6' }}>*</span></label>
                   <div style={s.inputWrapper}>
                     <MapPin style={s.icon} size={16} />
-                    <input type="text" style={s.input} placeholder="Enter full address..." value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                    <input type="text" style={s.input} placeholder="Enter full address..." value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
                   </div>
                 </div>
-              </div>
-
-              <div style={s.flexRow}>
-                <div style={s.flex1}>
-                  <label style={s.label}>Status <span style={{color: '#3b82f6'}}>*</span></label>
-                  <CustomSelect options={mockStatuses} value={formData.statusId} onChange={(val: string) => setFormData({...formData, statusId: val})} placeholder="Select Status..." icon={Activity} />
+                <div>
+                  <label style={s.label}>Status <span style={{ color: '#3b82f6' }}>*</span></label>
+                  <CustomSelect options={mockStatuses} value={formData.statusId} onChange={(val: string) => setFormData({ ...formData, statusId: val })} placeholder="Select Status..." icon={Activity} />
                 </div>
-                <div style={s.flex1}>
+
+                {/* Fila 2 */}
+                <div>
                   <label style={s.label}>Invoice Status</label>
-                  <CustomSelect options={invoiceOptions} value={formData.invoiceStatus} onChange={(val: any) => setFormData({...formData, invoiceStatus: val})} placeholder="Select Invoice Status..." icon={FileText} />
+                  <CustomSelect options={invoiceOptions} value={formData.invoiceStatus} onChange={(val: any) => setFormData({ ...formData, invoiceStatus: val })} placeholder="Select Invoice Status..." icon={FileText} />
                 </div>
-                <div style={s.flex1}>
+                <div>
                   <label style={s.label}>Services</label>
-                  <CustomSelect options={mockServices} value={formData.serviceId} onChange={(val: string) => setFormData({...formData, serviceId: val})} placeholder="Select Service..." icon={Wrench} />
+                  <CustomSelect options={mockServices} value={formData.serviceId} onChange={(val: string) => setFormData({ ...formData, serviceId: val })} placeholder="Select Service..." icon={Wrench} />
                 </div>
-              </div>
+                <div>
+                  <label style={s.label}>Priority</label>
+                  <CustomSelect options={mockPriorities} value={formData.priorityId} onChange={(val: string) => setFormData({ ...formData, priorityId: val })} placeholder="Select Priority..." icon={Flag} />
+                </div>
 
-              <div style={s.flexRow}>
-                <div style={s.flex1}>
+                {/* Fila 3 */}
+                <div>
                   <label style={s.label}>Receive Date</label>
                   <div style={s.inputWrapper}>
                     <CalendarDays style={s.icon} size={16} />
-                    <input type="date" style={s.input} value={formData.receiveDate} onChange={e => setFormData({...formData, receiveDate: e.target.value})} />
+                    <input type="date" style={s.input} value={formData.receiveDate} onChange={e => setFormData({ ...formData, receiveDate: e.target.value })} />
                   </div>
                 </div>
-                <div style={s.flex1}>
+                <div>
                   <label style={s.label}>Schedule Date</label>
                   <div style={s.inputWrapper}>
                     <CalendarDays style={s.icon} size={16} />
-                    <input type="date" style={s.input} value={formData.scheduleDate} onChange={e => setFormData({...formData, scheduleDate: e.target.value})} />
+                    <input type="date" style={s.input} value={formData.scheduleDate} onChange={e => setFormData({ ...formData, scheduleDate: e.target.value })} />
                   </div>
                 </div>
-                <div style={s.flex1}>
-                  <label style={s.label}>Priority</label>
-                  <CustomSelect options={mockPriorities} value={formData.priorityId} onChange={(val: string) => setFormData({...formData, priorityId: val})} placeholder="Select Priority..." icon={Flag} />
+                <div>
+                  <label style={s.label}>Team</label>
+                  <CustomSelect options={mockTeams} value={formData.teamId} onChange={(val: string) => setFormData({ ...formData, teamId: val })} placeholder="Assign Team..." icon={Users} />
                 </div>
-              </div>
 
-              <div style={s.flexRow}>
-                <div style={s.flex1}>
+                {/* Fila 4 */}
+                <div>
                   <label style={s.label}>Time In</label>
                   <div style={s.inputWrapper}>
                     <Clock style={s.icon} size={16} />
-                    <input type="time" style={s.input} value={formData.timeIn} onChange={e => setFormData({...formData, timeIn: e.target.value})} />
+                    <input type="time" style={s.input} value={formData.timeIn} onChange={e => setFormData({ ...formData, timeIn: e.target.value })} />
                   </div>
                 </div>
-                <div style={s.flex1}>
+                <div>
                   <label style={s.label}>Time Out</label>
                   <div style={s.inputWrapper}>
                     <Clock style={s.icon} size={16} />
-                    <input type="time" style={s.input} value={formData.timeOut} onChange={e => setFormData({...formData, timeOut: e.target.value})} />
+                    <input type="time" style={s.input} value={formData.timeOut} onChange={e => setFormData({ ...formData, timeOut: e.target.value })} />
                   </div>
                 </div>
-                <div style={s.flex1}>
-                  <label style={s.label}>Team</label>
-                  <CustomSelect options={mockTeams} value={formData.teamId} onChange={(val: string) => setFormData({...formData, teamId: val})} placeholder="Assign Team..." icon={Users} />
-                </div>
-              </div>
-
-              <div style={s.flexRow}>
-                <div style={s.flex1}>
+                <div>
                   <label style={s.label}>Rooms</label>
-                  <CustomSelect options={roomOptions} value={formData.rooms} onChange={(val: string) => setFormData({...formData, rooms: val})} placeholder="Rooms..." icon={Hash} />
+                  <CustomSelect options={roomOptions} value={formData.rooms} onChange={(val: string) => setFormData({ ...formData, rooms: val })} placeholder="Rooms..." icon={Hash} />
                 </div>
-                <div style={s.flex1}>
+
+                {/* Fila 5: Baños y Textareas que ocupan todo el ancho */}
+                <div>
                   <label style={s.label}>Bathrooms</label>
-                  <CustomSelect options={roomOptions} value={formData.bathrooms} onChange={(val: string) => setFormData({...formData, bathrooms: val})} placeholder="Bathrooms..." icon={Hash} />
+                  <CustomSelect options={roomOptions} value={formData.bathrooms} onChange={(val: string) => setFormData({ ...formData, bathrooms: val })} placeholder="Bathrooms..." icon={Hash} />
                 </div>
-                <div style={s.flex1}></div> 
-              </div>
 
-              <div style={s.flexRow}>
-                <div style={s.flexFull}>
+                <div className="col-span-full">
                   <label style={s.label}>Note</label>
-                  <div style={{...s.inputWrapper, alignItems: 'flex-start'}}>
-                    <StickyNote style={{...s.icon, top: '14px'}} size={16} />
-                    <textarea style={{...s.input, minHeight: '80px', resize: 'vertical'}} placeholder="General instructions or notes..." value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})}></textarea>
+                  <div style={{ ...s.inputWrapper, alignItems: 'flex-start' }}>
+                    <StickyNote style={{ ...s.icon, top: '14px' }} size={16} />
+                    <textarea style={{ ...s.input, minHeight: '80px', resize: 'vertical' }} placeholder="General instructions or notes..." value={formData.note} onChange={e => setFormData({ ...formData, note: e.target.value })}></textarea>
                   </div>
                 </div>
-              </div>
 
-              <div style={s.flexRow}>
-                <div style={s.flexFull}>
+                <div className="col-span-full">
                   <label style={s.label}>Employee's Note</label>
-                  <div style={{...s.inputWrapper, alignItems: 'flex-start'}}>
-                    <PenTool style={{...s.icon, top: '14px'}} size={16} />
-                    <textarea style={{...s.input, minHeight: '80px', resize: 'vertical'}} placeholder="Employee performance notes..." value={formData.employeeNote} onChange={e => setFormData({...formData, employeeNote: e.target.value})}></textarea>
+                  <div style={{ ...s.inputWrapper, alignItems: 'flex-start' }}>
+                    <PenTool style={{ ...s.icon, top: '14px' }} size={16} />
+                    <textarea style={{ ...s.input, minHeight: '80px', resize: 'vertical' }} placeholder="Employee performance notes..." value={formData.employeeNote} onChange={e => setFormData({ ...formData, employeeNote: e.target.value })}></textarea>
                   </div>
                 </div>
-              </div>
 
+              </div>
             </div>
-            
+
             <footer style={s.footer}>
               <button style={s.btnOutline} onClick={handleCloseForm}>Cancel</button>
               <button style={s.btnPrimary} onClick={handleSave}>Save Property</button>
@@ -514,24 +567,26 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
       )}
 
-      {/* --- MODAL DE DETALLES BLINDADO --- */}
+      {/* --- MODAL DE DETALLES (70% WIDTH & 3 COLUMN GRID) --- */}
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay" onClick={() => setIsDetailModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-70" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
-              <button style={s.closeBtn} onClick={() => setIsDetailModalOpen(false)}><X size={20} /></button>
+              <button style={s.closeBtn} onClick={() => setIsDetailModalOpen(false)}><X size={24} /></button>
             </header>
-            
+
             <div style={s.body}>
               <div style={s.detailBanner}>
-                <div style={{...s.detailItem, flex: '1 1 100%'}}>
-                  <span style={{...s.detailLabel, color: '#1e40af'}}><Home size={14} /> PROPERTY ADDRESS</span>
+                <div style={s.detailItem}>
+                  <span style={{ ...s.detailLabel, color: '#1e40af' }}><Home size={14} /> PROPERTY ADDRESS</span>
                   <span style={{ fontSize: '1.25rem', color: '#1e3a8a', fontWeight: 600, marginTop: '4px' }}>{selectedHouse.address}</span>
                 </div>
               </div>
 
-              <div style={s.flexRow}>
+              {/* Estructura CSS Grid para Detalles */}
+              <div className="grid-3-cols">
+
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
@@ -539,19 +594,36 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     <span style={s.detailValue}>{mockStatuses.find(st => st.id === selectedHouse.statusId)?.name || 'UNASSIGNED'}</span>
                   </div>
                 </div>
-                <div style={s.detailItem}><span style={s.detailLabel}><FileText size={14} /> INVOICE STATUS</span><span style={s.detailValue}>{selectedHouse.invoiceStatus || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><User size={14} /> CLIENT</span><span style={s.detailValue}>{selectedHouse.client || '-'}</span></div>
-              </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><FileText size={14} /> INVOICE STATUS</span>
+                  <span style={s.detailValue}>{selectedHouse.invoiceStatus || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><User size={14} /> CLIENT</span>
+                  <span style={s.detailValue}>{selectedHouse.client || '-'}</span>
+                </div>
 
-              <div style={s.flexRow}>
-                <div style={s.detailItem}><span style={s.detailLabel}><CalendarDays size={14} /> RECEIVE DATE</span><span style={s.detailValue}>{selectedHouse.receiveDate || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><CalendarDays size={14} /> SCHEDULE DATE</span><span style={s.detailValue}>{selectedHouse.scheduleDate || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><Wrench size={14} /> SERVICE</span><span style={s.detailValue}>{mockServices.find(srv => srv.id === selectedHouse.serviceId)?.name || '-'}</span></div>
-              </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><CalendarDays size={14} /> RECEIVE DATE</span>
+                  <span style={s.detailValue}>{selectedHouse.receiveDate || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><CalendarDays size={14} /> SCHEDULE DATE</span>
+                  <span style={s.detailValue}>{selectedHouse.scheduleDate || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Wrench size={14} /> SERVICE</span>
+                  <span style={s.detailValue}>{mockServices.find(srv => srv.id === selectedHouse.serviceId)?.name || '-'}</span>
+                </div>
 
-              <div style={s.flexRow}>
-                <div style={s.detailItem}><span style={s.detailLabel}><Clock size={14} /> TIME IN</span><span style={s.detailValue}>{selectedHouse.timeIn || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><Clock size={14} /> TIME OUT</span><span style={s.detailValue}>{selectedHouse.timeOut || '-'}</span></div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Clock size={14} /> TIME IN</span>
+                  <span style={s.detailValue}>{selectedHouse.timeIn || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Clock size={14} /> TIME OUT</span>
+                  <span style={s.detailValue}>{selectedHouse.timeOut || '-'}</span>
+                </div>
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Flag size={14} /> PRIORITY</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
@@ -559,11 +631,15 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     <span style={s.detailValue}>{mockPriorities.find(p => p.id === selectedHouse.priorityId)?.name || '-'}</span>
                   </div>
                 </div>
-              </div>
 
-              <div style={s.flexRow}>
-                <div style={s.detailItem}><span style={s.detailLabel}><Hash size={14} /> ROOMS</span><span style={s.detailValue}>{selectedHouse.rooms || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><Hash size={14} /> BATHROOMS</span><span style={s.detailValue}>{selectedHouse.bathrooms || '-'}</span></div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Hash size={14} /> ROOMS</span>
+                  <span style={s.detailValue}>{selectedHouse.rooms || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Hash size={14} /> BATHROOMS</span>
+                  <span style={s.detailValue}>{selectedHouse.bathrooms || '-'}</span>
+                </div>
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Users size={14} /> TEAM</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
@@ -571,24 +647,24 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     <span style={s.detailValue}>{mockTeams.find(t => t.id === selectedHouse.teamId)?.name || 'Unassigned'}</span>
                   </div>
                 </div>
-              </div>
-                
-              <div style={s.flexRow}>
-                <div style={s.noteBoxGray}>
-                  <span style={{...s.detailLabel, marginBottom: '8px'}}><StickyNote size={14} /> GENERAL NOTE</span>
-                  <span style={{...s.detailValue, fontSize: '0.95rem'}}>{selectedHouse.note || 'No notes provided.'}</span>
-                </div>
-              </div>
 
-              <div style={s.flexRow}>
-                <div style={s.noteBoxOrange}>
-                  <span style={{...s.detailLabel, marginBottom: '8px', color: '#c2410c'}}><PenTool size={14} /> EMPLOYEE'S NOTE</span>
-                  <span style={{...s.detailValue, fontSize: '0.95rem'}}>{selectedHouse.employeeNote || 'No employee notes provided.'}</span>
+                <div className="col-span-full">
+                  <div style={s.noteBoxGray}>
+                    <span style={{ ...s.detailLabel, marginBottom: '8px' }}><StickyNote size={14} /> GENERAL NOTE</span>
+                    <span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.note || 'No notes provided.'}</span>
+                  </div>
                 </div>
-              </div>
 
+                <div className="col-span-full">
+                  <div style={s.noteBoxOrange}>
+                    <span style={{ ...s.detailLabel, marginBottom: '8px', color: '#c2410c' }}><PenTool size={14} /> EMPLOYEE'S NOTE</span>
+                    <span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.employeeNote || 'No employee notes provided.'}</span>
+                  </div>
+                </div>
+
+              </div>
             </div>
-            
+
             <footer style={s.footerBetween}>
               <button style={s.btnDangerLight} onClick={() => {
                 setProperties(properties.filter(p => p.id !== selectedHouse.id));
