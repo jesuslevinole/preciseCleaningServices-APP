@@ -18,10 +18,16 @@ const collectionMap: Record<string, string> = {
   service: 'settings_services',
 };
 
-// --- CUSTOM COMPONENTS & HELPERS ---
+// --- CUSTOM COMPONENTS & HELPERS (A Prueba de Balas) ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  const selected = options.find((o: any) => o.id === value || o.name === value);
+  
+  // Búsqueda inteligente: ignora mayúsculas y espacios para compatibilidad con registros viejos
+  const safeValue = String(value || '').toLowerCase().trim();
+  const selected = options.find((o: any) => 
+    String(o.id).toLowerCase().trim() === safeValue || 
+    String(o.name).toLowerCase().trim() === safeValue
+  );
 
   return (
     <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
@@ -62,21 +68,31 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
   );
 };
 
+// Funciones de mapeo seguras
 const getRelationName = (list: any[], idOrName: string, fallback = '-') => {
-  return list.find(item => item.id === idOrName || item.name === idOrName)?.name || fallback;
+  if (!idOrName) return fallback;
+  const safeVal = String(idOrName).toLowerCase().trim();
+  const found = list.find(item => 
+    String(item.id).toLowerCase().trim() === safeVal || 
+    String(item.name).toLowerCase().trim() === safeVal
+  );
+  return found ? found.name : fallback;
 };
 
 const getRelationColor = (list: any[], idOrName: string) => {
-  return list.find(item => item.id === idOrName || item.name === idOrName)?.color;
+  if (!idOrName) return undefined;
+  const safeVal = String(idOrName).toLowerCase().trim();
+  return list.find(item => 
+    String(item.id).toLowerCase().trim() === safeVal || 
+    String(item.name).toLowerCase().trim() === safeVal
+  )?.color;
 };
 
-// 1. CORRECCIÓN: Agregamos onCheckHouse a las propiedades
 interface CalendarViewProps {
   onOpenMenu: () => void;
-  onCheckHouse?: (house: Property) => void; // Opcional para evitar romper el App.tsx
+  onCheckHouse?: (house: Property) => void;
 }
 
-// 2. CORRECCIÓN: Desestructuramos onCheckHouse
 export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewProps) {
   
   // --- FIREBASE STATES ---
@@ -318,7 +334,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
             {calendarDays.map((date, index) => {
               if (!date) return <div key={`empty-${index}`} className="calendar-day-cell empty"></div>;
               
-              // Ajuste de zona horaria para que no haya desfase en los días al renderizar
+              // Ajuste de zona horaria para que no haya desfase
               const offset = date.getTimezoneOffset()
               const localDate = new Date(date.getTime() - (offset*60*1000))
               const dateString = localDate.toISOString().split('T')[0]
@@ -579,7 +595,6 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
                 
-                {/* 3. APLICACIÓN SEGURA: Se verifica si onCheckHouse existe antes de llamarla */}
                 <button 
                   onClick={() => { setIsDetailModalOpen(false); onCheckHouse && onCheckHouse(selectedHouse); }}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
