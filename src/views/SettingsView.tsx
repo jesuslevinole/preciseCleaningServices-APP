@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { 
   Tags, Users, UserCheck, Flag, Activity, Percent, 
   MapPin, Wrench, CreditCard, ClipboardList, Package, Building, Plus,
-  Edit2, Trash2, X
+  Edit2, Trash2, X, ChevronDown // <-- 1. Añadido ChevronDown aquí
 } from 'lucide-react';
 import type { SettingOption, CategoryExpense, Team, Responsable, Priority, Status, Tax, Place, Service, PaymentMethod, Task, Product, Business } from '../types';
+
+// IMPORTACIÓN DEL SERVICIO DE FIREBASE
+import { settingsService } from '../services/settingsService';
 
 const settingsOptions: SettingOption[] = [
   { id: 'category', label: 'Category Expenses', icon: Tags },
@@ -22,40 +25,61 @@ const settingsOptions: SettingOption[] = [
   { id: 'business', label: 'Business', icon: Building },
 ];
 
-const initialCategories: CategoryExpense[] = [
-  { id: '1', name: 'Supplies' }, { id: '2', name: 'Payroll' }, { id: '3', name: 'Maintenance' }, { id: '4', name: 'Food' }, { id: '5', name: 'Drip pans/Light Bulbs' }
-];
-const initialTeams: Team[] = [
-  { id: '1', name: 'Team test', business: '', color: '#f97316' }, { id: '2', name: 'Team Jesus', business: '', color: '#e5e7eb' }, { id: '3', name: 'Team 10', business: '', color: '#22c55e' }
-];
-const initialResponsables: Responsable[] = [
-  { id: '1', name: 'Omar Marquez', color: '#e5e7eb' }, { id: '2', name: '43811d33', color: '#e5e7eb' }
-];
-const initialPriorities: Priority[] = [
-  { id: '1', name: 'HIGH', business: 'a', color: '#ef4444' }, { id: '2', name: 'MEDIUM', business: '', color: '#eab308' }, { id: '3', name: 'LOW', business: '', color: '#22c55e' }
-];
-const initialStatuses: Status[] = [
-  { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#4b5563' }, { id: '2', order: 2, name: 'NEEDS TO BE SCHEDULE', business: 'Regular', color: '#3b82f6' }
-];
-const initialPlaces: Place[] = [
-  { id: 'p1', name: 'Bathroom 1' }, { id: 'p2', name: 'Bathroom 2' }, { id: 'p3', name: 'Room 5' }, { id: 'p4', name: 'Room 4' }
-];
-const initialTasks: Task[] = [
-  { id: 't1', placeId: 'p3', name: 'Remove Cobwebs' }, { id: 't2', placeId: 'p3', name: 'Clean Light Fixture/AC Fans' }, { id: 't3', placeId: 'p3', name: 'Door/knobs/Walls' }, { id: 't4', placeId: 'p4', name: 'Closet' }
-];
-const initialProducts: Product[] = [
-  { id: 'pr1', name: 'Air Filter', price: '12.00' }, { id: 'pr3', name: 'Bulbs', price: '4.00' }
-];
-const initialBusinesses: Business[] = [
-  { id: 'b1', name: 'Regular' }, { id: 'b2', name: 'Cavalry' }
-];
-const initialServices: Service[] = [
-  { id: 's1', name: 'Full', estimatedTime: '', business: '' }, { id: 's2', name: 'Light', estimatedTime: '120', business: '' }
-];
-const initialPaymentMethods: PaymentMethod[] = [
-  { id: 'pm1', name: 'Cash' }, { id: 'pm2', name: 'Credit card' }
-];
-const initialTax: Tax = { id: 'tax-1', percentage: 8.25 };
+const collectionMap: Record<string, string> = {
+  category: 'settings_categories',
+  team: 'settings_teams',
+  responsable: 'settings_responsables',
+  priority: 'settings_priorities',
+  status: 'settings_statuses',
+  tax: 'settings_tax', 
+  place: 'settings_places',
+  service: 'settings_services',
+  payment: 'settings_payment_methods',
+  task: 'settings_tasks',
+  product: 'settings_products',
+  business: 'settings_businesses'
+};
+
+const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selected = options.find((o: any) => o.id === value);
+
+  return (
+    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', position: 'relative' }}
+      >
+        <Icon size={16} style={{ position: 'absolute', left: '14px', color: '#6b7280' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {selected?.color && <span style={{ backgroundColor: selected.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
+          <span style={{ color: selected ? '#111827' : '#9ca3af' }}>{selected ? selected.name : placeholder}</span>
+        </div>
+        <ChevronDown size={16} color="#9ca3af" style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+      </div>
+
+      {isOpen && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, width: '100%', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 1000, maxHeight: '220px', overflowY: 'auto', marginTop: '4px' }}>
+          <div style={{ padding: '12px 14px', cursor: 'pointer', color: '#9ca3af', borderBottom: '1px solid #f3f4f6' }} onMouseDown={(e) => { e.preventDefault(); onChange(''); setIsOpen(false); }}>
+            None / Unassigned
+          </div>
+          {options.map((o: any) => (
+            <div 
+              key={o.id} 
+              style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(o.id); setIsOpen(false); }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              {o.color && <span style={{ backgroundColor: o.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', flexShrink: 0 }}></span>}
+              <span style={{ color: '#111827', fontWeight: 500 }}>{o.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface SettingsViewProps {
   currentSettingView: string;
@@ -64,19 +88,23 @@ interface SettingsViewProps {
 }
 
 export default function SettingsView({ currentSettingView, setCurrentSettingView, onOpenMenu }: SettingsViewProps) {
-  const [categories, setCategories] = useState<CategoryExpense[]>(initialCategories);
-  const [teams, setTeams] = useState<Team[]>(initialTeams);
-  const [responsables, setResponsables] = useState<Responsable[]>(initialResponsables);
-  const [priorities, setPriorities] = useState<Priority[]>(initialPriorities);
-  const [statuses, setStatuses] = useState<Status[]>(initialStatuses);
-  const [services, setServices] = useState<Service[]>(initialServices);
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(initialPaymentMethods);
-  const [taxValue, setTaxValue] = useState<Tax>(initialTax);
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [businesses, setBusinesses] = useState<Business[]>(initialBusinesses);
-  const [places, setPlaces] = useState<Place[]>(initialPlaces);
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
   
+  const [categories, setCategories] = useState<CategoryExpense[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [responsables, setResponsables] = useState<Responsable[]>([]);
+  const [priorities, setPriorities] = useState<Priority[]>([]);
+  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [taxValue, setTaxValue] = useState<Tax>({ id: 'tax-1', percentage: 0 });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -94,26 +122,70 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
 
   const activeSettingOption = settingsOptions.find(opt => opt.id === currentSettingView);
 
-  // --- ESTILOS BLINDADOS (TABLAS Y MODALES) ---
-  const thStyle = { backgroundColor: '#f9fafb', padding: '6px 12px', color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb', textAlign: 'left' as const };
-  const tdStyle = { padding: '6px 12px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontSize: '0.95rem' };
+  useEffect(() => {
+    const fetchAllSettings = async () => {
+      setIsLoading(true);
+      try {
+        const [
+          catData, teamData, respData, prioData, statData, servData, 
+          payData, prodData, busData, placeData, taskData, taxData
+        ] = await Promise.all([
+          settingsService.getAll(collectionMap.category),
+          settingsService.getAll(collectionMap.team),
+          settingsService.getAll(collectionMap.responsable),
+          settingsService.getAll(collectionMap.priority),
+          settingsService.getAll(collectionMap.status),
+          settingsService.getAll(collectionMap.service),
+          settingsService.getAll(collectionMap.payment),
+          settingsService.getAll(collectionMap.product),
+          settingsService.getAll(collectionMap.business),
+          settingsService.getAll(collectionMap.place),
+          settingsService.getAll(collectionMap.task),
+          settingsService.getAll(collectionMap.tax)
+        ]);
+
+        if (catData.length) setCategories(catData as CategoryExpense[]);
+        if (teamData.length) setTeams(teamData as Team[]);
+        if (respData.length) setResponsables(respData as Responsable[]);
+        if (prioData.length) setPriorities(prioData as Priority[]);
+        if (statData.length) setStatuses((statData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
+        if (servData.length) setServices(servData as Service[]);
+        if (payData.length) setPaymentMethods(payData as PaymentMethod[]);
+        if (prodData.length) setProducts(prodData as Product[]);
+        if (busData.length) setBusinesses(busData as Business[]);
+        if (placeData.length) setPlaces(placeData as Place[]);
+        if (taskData.length) setTasks(taskData as Task[]);
+        if (taxData.length) setTaxValue(taxData[0] as Tax);
+
+      } catch (error) {
+        console.error("Error fetching settings:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAllSettings();
+  }, []);
+
+  const thStyle = { backgroundColor: '#f9fafb', padding: '12px 16px', color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb', textAlign: 'left' as const };
+  const tdStyle = { padding: '12px 16px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontSize: '0.95rem', verticalAlign: 'middle' as const };
 
   const s = {
-    overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' } as React.CSSProperties,
-    modal: { backgroundColor: '#ffffff', width: '100%', maxWidth: '450px', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' } as React.CSSProperties,
+    overlayCentered: { position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px', boxSizing: 'border-box' } as React.CSSProperties,
+    modal: { backgroundColor: '#ffffff', width: '100%', maxWidth: '450px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' } as React.CSSProperties,
     modalWide: { maxWidth: '700px' },
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.15rem', fontWeight: 600, color: '#111827', margin: 0 },
     body: { padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' } as React.CSSProperties,
-    footer: { display: 'flex', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', flexShrink: 0 },
+    footer: { display: 'flex', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     formGroup: { display: 'flex', flexDirection: 'column', gap: '6px' } as React.CSSProperties,
-    label: { fontSize: '0.9rem', color: '#6b7280', fontWeight: 500 },
+    label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' } as React.CSSProperties,
     input: { padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none' } as React.CSSProperties,
-    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
-    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
+    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
+    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
     btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
     closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex' },
-    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' } as React.CSSProperties,
+    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' } as React.CSSProperties,
     detailLabel: { fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
     detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500 }
   };
@@ -151,90 +223,102 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
   const handleAddTempTask = (e?: React.KeyboardEvent) => {
     if (e) e.preventDefault();
     if (newTaskInput.trim() === '') return;
-    setFormData({ ...formData, placeTasks: [...formData.placeTasks, { id: '', name: newTaskInput }] });
+    setFormData({ ...formData, placeTasks: [...formData.placeTasks, { id: `temp-${Date.now()}`, name: newTaskInput }] });
     setNewTaskInput('');
   };
 
-  const handleQuickAddTask = () => {
+  const handleQuickAddTask = async () => {
     if (newTaskInput.trim() === '') return;
-    const newTask: Task = { id: Date.now().toString(), placeId: selectedItem.id, name: newTaskInput };
-    setTasks([...tasks, newTask]);
-    setNewTaskInput('');
-    setShowQuickAdd(false);
-  };
-
-  const confirmDeleteTask = (taskId: string) => {
-    if (window.confirm("Delete this task?")) {
-      setTasks(tasks.filter(t => t.id !== taskId));
+    setIsSaving(true);
+    try {
+      const data = { placeId: selectedItem.id, name: newTaskInput };
+      const newId = await settingsService.create(collectionMap.task, data);
+      setTasks([...tasks, { id: newId, ...data }]);
+      setNewTaskInput('');
+      setShowQuickAdd(false);
+    } catch(err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (currentSettingView === 'tax') {
-      setTaxValue({ ...taxValue, percentage: Number(formData.percentage) });
-      handleCloseForm(); return;
+      setIsSaving(true);
+      try {
+        const data = { percentage: Number(formData.percentage) };
+        if(taxValue.id === 'tax-1') {
+          await settingsService.create(collectionMap.tax, data);
+        } else {
+          await settingsService.update(collectionMap.tax, taxValue.id, data);
+        }
+        setTaxValue({ ...taxValue, percentage: data.percentage });
+        handleCloseForm();
+      } catch(err) { console.error(err); }
+      finally { setIsSaving(false); }
+      return;
     }
 
-    if (currentSettingView === 'task' && !formData.placeId) {
-      alert("Please select a Place."); return;
-    }
+    if (currentSettingView === 'task' && !formData.placeId) return alert("Please select a Place.");
+    if (formData.name.trim() === '') return alert("Name is required.");
 
-    if (formData.name.trim() === '') return;
+    setIsSaving(true);
+    const colName = collectionMap[currentSettingView];
     
-    if (currentSettingView === 'category') {
-      if (selectedItem) setCategories(categories.map(c => c.id === selectedItem.id ? { ...c, name: formData.name } : c));
-      else setCategories([...categories, { id: Date.now().toString(), name: formData.name }]);
-    } 
-    else if (currentSettingView === 'place') {
-      const placeId = selectedItem ? selectedItem.id : Date.now().toString();
-      if (selectedItem) setPlaces(places.map(p => p.id === placeId ? { ...p, name: formData.name } : p));
-      else setPlaces([...places, { id: placeId, name: formData.name }]);
-      
-      const otherTasks = tasks.filter(t => t.placeId !== placeId); 
-      const newTasks = formData.placeTasks.map(pt => ({
-        id: pt.id || Date.now().toString() + Math.random().toString(), 
-        placeId: placeId, name: pt.name
-      }));
-      setTasks([...otherTasks, ...newTasks]); 
+    try {
+      let dataToSave: any = { name: formData.name };
+      if (['team','priority','status','service'].includes(currentSettingView)) dataToSave.business = formData.business;
+      if (['team','responsable','priority','status'].includes(currentSettingView)) dataToSave.color = formData.color;
+      if (currentSettingView === 'status') dataToSave.order = formData.order;
+      if (currentSettingView === 'task') dataToSave.placeId = formData.placeId;
+      if (currentSettingView === 'product') dataToSave.price = formData.price;
+      if (currentSettingView === 'service') dataToSave.estimatedTime = formData.estimatedTime;
+
+      let finalId = selectedItem?.id;
+      if (selectedItem) {
+        await settingsService.update(colName, finalId, dataToSave);
+      } else {
+        finalId = await settingsService.create(colName, dataToSave);
+      }
+
+      if (currentSettingView === 'place') {
+        for (const pt of formData.placeTasks) {
+          if (pt.id.startsWith('temp-')) {
+            const newTaskId = await settingsService.create(collectionMap.task, { placeId: finalId, name: pt.name });
+            setTasks(prev => [...prev, { id: newTaskId, placeId: finalId, name: pt.name }]);
+          }
+        }
+      }
+
+      const updatedItem = { id: finalId, ...dataToSave };
+      const updateList = (list: any[], setList: any) => {
+        if (selectedItem) setList(list.map(i => i.id === finalId ? { ...i, ...dataToSave } : i));
+        else setList([...list, updatedItem]);
+      };
+
+      if (currentSettingView === 'category') updateList(categories, setCategories);
+      if (currentSettingView === 'place') updateList(places, setPlaces);
+      if (currentSettingView === 'task') updateList(tasks, setTasks);
+      if (currentSettingView === 'team') updateList(teams, setTeams);
+      if (currentSettingView === 'status') {
+         const newStatuses = selectedItem ? statuses.map(s => s.id === finalId ? { ...s, ...dataToSave } : s) : [...statuses, updatedItem];
+         setStatuses(newStatuses.sort((a:any, b:any) => Number(a.order) - Number(b.order)));
+      }
+      if (currentSettingView === 'product') updateList(products, setProducts);
+      if (currentSettingView === 'business') updateList(businesses, setBusinesses);
+      if (currentSettingView === 'responsable') updateList(responsables, setResponsables);
+      if (currentSettingView === 'priority') updateList(priorities, setPriorities);
+      if (currentSettingView === 'service') updateList(services, setServices);
+      if (currentSettingView === 'payment') updateList(paymentMethods, setPaymentMethods);
+
+      handleCloseForm();
+    } catch (error) {
+      console.error("Error saving setting:", error);
+      alert("Failed to save setting.");
+    } finally {
+      setIsSaving(false);
     }
-    else if (currentSettingView === 'task') {
-      if (selectedItem) setTasks(tasks.map(t => t.id === selectedItem.id ? { ...t, name: formData.name, placeId: formData.placeId } : t));
-      else setTasks([...tasks, { id: Date.now().toString(), name: formData.name, placeId: formData.placeId }]);
-    }
-    else if (currentSettingView === 'team') {
-      if (selectedItem) setTeams(teams.map(t => t.id === selectedItem.id ? { ...t, name: formData.name, business: formData.business, color: formData.color } : t));
-      else setTeams([...teams, { id: Date.now().toString(), name: formData.name, business: formData.business, color: formData.color }]);
-    }
-    else if (currentSettingView === 'status') {
-      if (selectedItem) setStatuses(statuses.map(s => s.id === selectedItem.id ? { ...s, order: formData.order, name: formData.name, business: formData.business, color: formData.color } : s));
-      else setStatuses([...statuses, { id: Date.now().toString(), order: formData.order, name: formData.name, business: formData.business, color: formData.color }]);
-    }
-    else if (currentSettingView === 'product') {
-      if (selectedItem) setProducts(products.map(p => p.id === selectedItem.id ? { ...p, name: formData.name, price: formData.price } : p));
-      else setProducts([...products, { id: Date.now().toString(), name: formData.name, price: formData.price }]);
-    }
-    else if (currentSettingView === 'business') {
-      if (selectedItem) setBusinesses(businesses.map(b => b.id === selectedItem.id ? { ...b, name: formData.name } : b));
-      else setBusinesses([...businesses, { id: Date.now().toString(), name: formData.name }]);
-    }
-    else if (currentSettingView === 'responsable') {
-      if (selectedItem) setResponsables(responsables.map(r => r.id === selectedItem.id ? { ...r, name: formData.name, color: formData.color } : r));
-      else setResponsables([...responsables, { id: Date.now().toString(), name: formData.name, color: formData.color }]);
-    }
-    else if (currentSettingView === 'priority') {
-      if (selectedItem) setPriorities(priorities.map(p => p.id === selectedItem.id ? { ...p, name: formData.name, business: formData.business, color: formData.color } : p));
-      else setPriorities([...priorities, { id: Date.now().toString(), name: formData.name, business: formData.business, color: formData.color }]);
-    }
-    else if (currentSettingView === 'service') {
-      if (selectedItem) setServices(services.map(s => s.id === selectedItem.id ? { ...s, name: formData.name, estimatedTime: formData.estimatedTime, business: formData.business } : s));
-      else setServices([...services, { id: Date.now().toString(), name: formData.name, estimatedTime: formData.estimatedTime, business: formData.business }]);
-    }
-    else if (currentSettingView === 'payment') {
-      if (selectedItem) setPaymentMethods(paymentMethods.map(p => p.id === selectedItem.id ? { ...p, name: formData.name } : p));
-      else setPaymentMethods([...paymentMethods, { id: Date.now().toString(), name: formData.name }]);
-    }
-    
-    handleCloseForm();
   };
 
   const handleOpenDetail = (item: any) => {
@@ -249,12 +333,29 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
     setIsDeleteModalOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (itemToDelete) {
+  const confirmDeleteTask = async (taskId: string) => {
+    if (window.confirm("Delete this task?")) {
+      setIsSaving(true);
+      try {
+        await settingsService.delete(collectionMap.task, taskId);
+        setTasks(tasks.filter(t => t.id !== taskId));
+      } catch(err) { console.error(err); }
+      finally { setIsSaving(false); }
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    setIsSaving(true);
+    const colName = collectionMap[currentSettingView];
+
+    try {
+      await settingsService.delete(colName, itemToDelete);
+
       if (currentSettingView === 'category') setCategories(categories.filter(c => c.id !== itemToDelete));
       else if (currentSettingView === 'place') {
         setPlaces(places.filter(p => p.id !== itemToDelete));
-        setTasks(tasks.filter(t => t.placeId !== itemToDelete));
+        setTasks(tasks.filter(t => t.placeId !== itemToDelete)); 
       }
       else if (currentSettingView === 'task') setTasks(tasks.filter(t => t.id !== itemToDelete));
       else if (currentSettingView === 'team') setTeams(teams.filter(t => t.id !== itemToDelete));
@@ -269,6 +370,11 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
       setItemToDelete(null);
       setIsDeleteModalOpen(false);
       setIsDetailModalOpen(false); 
+    } catch(err) {
+      console.error(err);
+      alert("Failed to delete item.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -280,6 +386,42 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
 
   return (
     <div className="settings-wrapper fade-in" style={{ padding: '20px' }}>
+      
+      <style>{`
+        @media (max-width: 768px) {
+          .responsive-settings-table thead { display: none; }
+          .responsive-settings-table tr {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            padding: 16px;
+            background: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+          }
+          .responsive-settings-table td {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f1f5f9;
+            text-align: right;
+            white-space: normal !important;
+          }
+          .responsive-settings-table td:last-child { border-bottom: none; padding-bottom: 0; }
+          .responsive-settings-table td::before {
+            content: attr(data-label);
+            font-weight: 700;
+            color: #6b7280;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 16px;
+          }
+        }
+      `}</style>
+
       {currentSettingView === 'menu' && (
         <>
           <header className="settings-header">
@@ -292,7 +434,7 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                     <line x1="3" y1="18" x2="21" y2="18"></line>
                   </svg>
                 </button>
-                <h2 style={{ margin: 0 }}>Settings</h2>
+                <h2 style={{ margin: 0, fontSize: '1.8rem' }}>Settings</h2>
               </div>
               <p style={{ marginTop: '4px', color: '#6b7280' }}>Manage your system parameters and lists</p>
             </div>
@@ -312,7 +454,7 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                   <div style={{ backgroundColor: '#eff6ff', color: '#3b82f6', width: '56px', height: '56px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Icon size={24} />
                   </div>
-                  <span style={{ fontSize: '1rem', fontWeight: 500 }}>{option.label}</span>
+                  <span style={{ fontSize: '1rem', fontWeight: 600 }}>{option.label}</span>
                 </button>
               );
             })}
@@ -332,157 +474,160 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                     <line x1="3" y1="18" x2="21" y2="18"></line>
                   </svg>
                 </button>
-                <button style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.9rem', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px 0', fontFamily: 'monospace' }} onClick={() => setCurrentSettingView('menu')}>&lt;&lt; Back</button>
+                <button style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }} onClick={() => setCurrentSettingView('menu')}>&lt; Back to Settings</button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <activeSettingOption.icon size={28} color="#3b82f6" />
-                <h2 style={{ fontSize: '1.8rem', margin: 0, color: '#111827' }}>{activeSettingOption.label}</h2>
+                <h2 style={{ fontSize: '1.8rem', margin: 0, color: '#111827', fontWeight: 700 }}>{activeSettingOption.label}</h2>
               </div>
             </div>
             {currentSettingView !== 'tax' && (
-              <button onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '8px', fontWeight: 500, cursor: 'pointer' }}><Plus size={18} /> Add New</button>
+              <button onClick={() => handleOpenForm()} style={s.btnPrimary}><Plus size={18} /> Add New</button>
             )}
           </header>
 
-          {/* TABLA DE CONFIGURACIONES BLINDADA */}
-          <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', width: '100%', overflow: 'hidden' }}>
+          <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', width: '100%', overflow: 'hidden', padding: '10px' }}>
             <div style={{ overflowX: 'auto', width: '100%' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
-                <thead>
-                  <tr>
-                    {currentSettingView === 'status' && <th style={thStyle}>Order</th>}
-                    {currentSettingView === 'task' && <th style={thStyle}>Place</th>}
-                    
-                    {currentSettingView === 'task' ? <th style={thStyle}>Task</th> : 
-                     currentSettingView === 'tax' ? <th style={thStyle}>Tax %</th> : 
-                     currentSettingView === 'business' ? <th style={thStyle}>Business</th> : 
-                     currentSettingView === 'payment' ? <th style={thStyle}>Payment Method</th> :
-                     <th style={thStyle}>Name</th>}
-                    
-                    {currentSettingView === 'product' && <th style={thStyle}>Price</th>}
-                    {currentSettingView === 'service' && <th style={thStyle}>Estimated time</th>}
-                    
-                    {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && <th style={thStyle}>Business</th>}
-                    {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && <th style={thStyle}>Color</th>}
-                    
-                    <th style={{...thStyle, textAlign: 'right', width: '100px'}}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentSettingView === 'category' && categories.map((cat) => (
-                    <tr key={cat.id} onClick={() => handleOpenDetail(cat)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{cat.name}</td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(cat); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(cat.id); }}><Trash2 size={16} /></button></div></td>
+              {isLoading ? (
+                 <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>Loading data...</div>
+              ) : (
+                <table className="responsive-settings-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                  <thead>
+                    <tr>
+                      {currentSettingView === 'status' && <th style={thStyle}>Order</th>}
+                      {currentSettingView === 'task' && <th style={thStyle}>Place</th>}
+                      
+                      {currentSettingView === 'task' ? <th style={thStyle}>Task</th> : 
+                       currentSettingView === 'tax' ? <th style={thStyle}>Tax %</th> : 
+                       currentSettingView === 'business' ? <th style={thStyle}>Business</th> : 
+                       currentSettingView === 'payment' ? <th style={thStyle}>Payment Method</th> :
+                       <th style={thStyle}>Name</th>}
+                      
+                      {currentSettingView === 'product' && <th style={thStyle}>Price</th>}
+                      {currentSettingView === 'service' && <th style={thStyle}>Estimated time</th>}
+                      
+                      {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && <th style={thStyle}>Business</th>}
+                      {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && <th style={thStyle}>Color</th>}
+                      
+                      <th style={{...thStyle, textAlign: 'right', width: '100px'}}>Actions</th>
                     </tr>
-                  ))}
-
-                  {currentSettingView === 'team' && teams.map((team) => (
-                    <tr key={team.id} onClick={() => handleOpenDetail(team)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{team.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{team.business || '-'}</td><td style={tdStyle}><span className="color-dot" style={{ backgroundColor: team.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%' }}></span></td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(team); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(team.id); }}><Trash2 size={16} /></button></div></td>
-                    </tr>
-                  ))}
-
-                  {currentSettingView === 'responsable' && responsables.map((resp) => (
-                    <tr key={resp.id} onClick={() => handleOpenDetail(resp)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{resp.name}</td><td style={tdStyle}><span className="color-dot" style={{ backgroundColor: resp.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%' }}></span></td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(resp); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(resp.id); }}><Trash2 size={16} /></button></div></td>
-                    </tr>
-                  ))}
-
-                  {currentSettingView === 'priority' && priorities.map((priority) => (
-                    <tr key={priority.id} onClick={() => handleOpenDetail(priority)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{priority.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{priority.business || '-'}</td><td style={tdStyle}><span className="color-dot" style={{ backgroundColor: priority.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%' }}></span></td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(priority); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(priority.id); }}><Trash2 size={16} /></button></div></td>
-                    </tr>
-                  ))}
-
-                  {currentSettingView === 'status' && statuses.map((status) => (
-                    <tr key={status.id} onClick={() => handleOpenDetail(status)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{status.order}</td><td style={tdStyle}>{status.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{status.business || '-'}</td><td style={tdStyle}><span className="color-dot" style={{ backgroundColor: status.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%' }}></span></td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(status); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(status.id); }}><Trash2 size={16} /></button></div></td>
-                    </tr>
-                  ))}
-
-                  {currentSettingView === 'place' && places.map((place) => (
-                    <tr key={place.id} onClick={() => handleOpenDetail(place)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{place.name}</td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(place.id); }}><Trash2 size={16} /></button></div></td>
-                    </tr>
-                  ))}
-
-                  {currentSettingView === 'task' && sortedTasks.map((task) => {
-                    const placeName = places.find(p => p.id === task.placeId)?.name || 'Unknown Place';
-                    return (
-                      <tr key={task.id} onClick={() => handleOpenDetail(task)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                        <td style={{...tdStyle, color: '#6b7280'}}>{placeName}</td><td style={{...tdStyle, fontWeight: 500}}>{task.name}</td>
-                        <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(task); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(task.id); }}><Trash2 size={16} /></button></div></td>
+                  </thead>
+                  <tbody>
+                    {currentSettingView === 'category' && categories.map((cat) => (
+                      <tr key={cat.id} onClick={() => handleOpenDetail(cat)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Name" style={tdStyle}>{cat.name}</td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(cat); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(cat.id); }}><Trash2 size={16} /></button></div></td>
                       </tr>
-                    )
-                  })}
+                    ))}
 
-                  {currentSettingView === 'product' && products.map((product) => (
-                    <tr key={product.id} onClick={() => handleOpenDetail(product)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{product.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{product.price ? `$${Number(product.price).toFixed(2)}` : '-'}</td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(product); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(product.id); }}><Trash2 size={16} /></button></div></td>
-                    </tr>
-                  ))}
+                    {currentSettingView === 'team' && teams.map((team) => (
+                      <tr key={team.id} onClick={() => handleOpenDetail(team)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Name" style={tdStyle}>{team.name}</td><td data-label="Business" style={{...tdStyle, color: '#6b7280'}}>{team.business || '-'}</td><td data-label="Color" style={tdStyle}><span style={{ backgroundColor: team.color, display: 'inline-block', width: '16px', height: '16px', borderRadius: '50%' }}></span></td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(team); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(team.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    ))}
 
-                  {currentSettingView === 'business' && businesses.map((bus) => (
-                    <tr key={bus.id} onClick={() => handleOpenDetail(bus)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{bus.name}</td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(bus); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(bus.id); }}><Trash2 size={16} /></button></div></td>
-                    </tr>
-                  ))}
-                  
-                  {currentSettingView === 'service' && services.map((srv) => (
-                    <tr key={srv.id} onClick={() => handleOpenDetail(srv)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{srv.name}</td><td style={{...tdStyle, color: '#6b7280'}}>{srv.estimatedTime || '-'}</td><td style={{...tdStyle, color: '#6b7280'}}>{srv.business || '-'}</td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(srv); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(srv.id); }}><Trash2 size={16} /></button></div></td>
-                    </tr>
-                  ))}
+                    {currentSettingView === 'responsable' && responsables.map((resp) => (
+                      <tr key={resp.id} onClick={() => handleOpenDetail(resp)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Name" style={tdStyle}>{resp.name}</td><td data-label="Color" style={tdStyle}><span style={{ backgroundColor: resp.color, display: 'inline-block', width: '16px', height: '16px', borderRadius: '50%' }}></span></td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(resp); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(resp.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    ))}
 
-                  {currentSettingView === 'payment' && paymentMethods.map((payment) => (
-                    <tr key={payment.id} onClick={() => handleOpenDetail(payment)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={tdStyle}>{payment.name}</td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(payment); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(payment.id); }}><Trash2 size={16} /></button></div></td>
-                    </tr>
-                  ))}
+                    {currentSettingView === 'priority' && priorities.map((priority) => (
+                      <tr key={priority.id} onClick={() => handleOpenDetail(priority)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Name" style={tdStyle}>{priority.name}</td><td data-label="Business" style={{...tdStyle, color: '#6b7280'}}>{priority.business || '-'}</td><td data-label="Color" style={tdStyle}><span style={{ backgroundColor: priority.color, display: 'inline-block', width: '16px', height: '16px', borderRadius: '50%' }}></span></td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(priority); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(priority.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    ))}
 
-                  {currentSettingView === 'tax' && (
-                    <tr onClick={() => handleOpenDetail(taxValue)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                      <td style={{...tdStyle, fontWeight: '500'}}>{taxValue.percentage}%</td>
-                      <td style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(taxValue); }}><Edit2 size={16} /></button></div></td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    {currentSettingView === 'status' && statuses.map((status) => (
+                      <tr key={status.id} onClick={() => handleOpenDetail(status)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Order" style={tdStyle}>{status.order}</td><td data-label="Name" style={{...tdStyle, fontWeight: 600}}>{status.name}</td><td data-label="Business" style={{...tdStyle, color: '#6b7280'}}>{status.business || '-'}</td><td data-label="Color" style={tdStyle}><span style={{ backgroundColor: status.color, display: 'inline-block', width: '16px', height: '16px', borderRadius: '50%' }}></span></td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(status); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(status.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    ))}
+
+                    {currentSettingView === 'place' && places.map((place) => (
+                      <tr key={place.id} onClick={() => handleOpenDetail(place)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Name" style={tdStyle}>{place.name}</td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(place); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(place.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    ))}
+
+                    {currentSettingView === 'task' && sortedTasks.map((task) => {
+                      const placeName = places.find(p => p.id === task.placeId)?.name || 'Unknown Place';
+                      return (
+                        <tr key={task.id} onClick={() => handleOpenDetail(task)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                          <td data-label="Place" style={{...tdStyle, color: '#6b7280'}}>{placeName}</td><td data-label="Task" style={{...tdStyle, fontWeight: 500}}>{task.name}</td>
+                          <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(task); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(task.id); }}><Trash2 size={16} /></button></div></td>
+                        </tr>
+                      )
+                    })}
+
+                    {currentSettingView === 'product' && products.map((product) => (
+                      <tr key={product.id} onClick={() => handleOpenDetail(product)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Name" style={tdStyle}>{product.name}</td><td data-label="Price" style={{...tdStyle, color: '#6b7280'}}>{product.price ? `$${Number(product.price).toFixed(2)}` : '-'}</td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(product); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(product.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    ))}
+
+                    {currentSettingView === 'business' && businesses.map((bus) => (
+                      <tr key={bus.id} onClick={() => handleOpenDetail(bus)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Name" style={tdStyle}>{bus.name}</td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(bus); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(bus.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    ))}
+                    
+                    {currentSettingView === 'service' && services.map((srv) => (
+                      <tr key={srv.id} onClick={() => handleOpenDetail(srv)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Name" style={tdStyle}>{srv.name}</td><td data-label="Est. Time" style={{...tdStyle, color: '#6b7280'}}>{srv.estimatedTime || '-'}</td><td data-label="Business" style={{...tdStyle, color: '#6b7280'}}>{srv.business || '-'}</td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(srv); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(srv.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    ))}
+
+                    {currentSettingView === 'payment' && paymentMethods.map((payment) => (
+                      <tr key={payment.id} onClick={() => handleOpenDetail(payment)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Name" style={tdStyle}>{payment.name}</td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(payment); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(payment.id); }}><Trash2 size={16} /></button></div></td>
+                      </tr>
+                    ))}
+
+                    {currentSettingView === 'tax' && (
+                      <tr onClick={() => handleOpenDetail(taxValue)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td data-label="Tax %" style={{...tdStyle, fontWeight: '700', fontSize: '1.2rem', color: '#3b82f6'}}>{taxValue.percentage}%</td>
+                        <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(taxValue); }}><Edit2 size={16} /></button></div></td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* --- MODAL DE FORMULARIO (CREAR / EDITAR) BLINDADO --- */}
+      {/* --- MODAL DE FORMULARIO (CREAR / EDITAR) BLINDADO CENTRADO --- */}
       {isFormModalOpen && (
-        <div style={s.overlay} onClick={handleCloseForm}>
-          <div style={s.modal} onClick={e => e.stopPropagation()}>
+        <div style={s.overlayCentered} onClick={handleCloseForm}>
+          <div style={{...s.modal, ...(currentSettingView === 'place' ? s.modalWide : {})}} onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>{selectedItem ? 'Edit' : 'New'} {activeSettingOption?.label}</h3>
               <button style={s.closeBtn} onClick={handleCloseForm}><X size={20} /></button>
             </header>
             <div style={s.body}>
 
+              {/* 2. Ahora sí utilizamos nuestro CustomSelect premium en lugar del select feo */}
               {currentSettingView === 'task' && (
                  <div style={s.formGroup}>
                   <label style={s.label}>Place <span style={{color: '#3b82f6'}}>*</span></label>
-                  <select 
-                    style={s.input}
+                  <CustomSelect
+                    options={places}
                     value={formData.placeId}
-                    onChange={(e) => setFormData({ ...formData, placeId: e.target.value })}
-                  >
-                    <option value="">Select a Place...</option>
-                    {places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                    onChange={(val: string) => setFormData({ ...formData, placeId: val })}
+                    placeholder="Select a Place..."
+                    icon={MapPin}
+                  />
                 </div>
               )}
 
@@ -550,9 +695,9 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                       <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {formData.placeTasks.length === 0 && <li style={{ padding: '12px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '6px' }}>No tasks added yet.</li>}
                         {formData.placeTasks.map((t, idx) => (
-                          <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem' }}>
-                            <span>{t.name}</span>
-                            <button style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex' }} onClick={() => setFormData({...formData, placeTasks: formData.placeTasks.filter((_, i) => i !== idx)})}><Trash2 size={16}/></button>
+                          <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.95rem' }}>
+                            <span style={{ fontWeight: 500, color: '#1e293b' }}>{t.name}</span>
+                            <button style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', padding: '4px' }} onClick={() => setFormData({...formData, placeTasks: formData.placeTasks.filter((_, i) => i !== idx)})}><Trash2 size={16}/></button>
                           </li>
                         ))}
                       </ul>
@@ -563,16 +708,16 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
 
             </div>
             <footer style={{...s.footer, justifyContent: 'flex-end'}}>
-              <button style={s.btnOutline} onClick={handleCloseForm}>Cancel</button>
-              <button style={s.btnPrimary} onClick={handleSave}>Save</button>
+              <button style={s.btnOutline} onClick={handleCloseForm} disabled={isSaving}>Cancel</button>
+              <button style={s.btnPrimary} onClick={handleSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save'}</button>
             </footer>
           </div>
         </div>
       )}
 
-      {/* --- MODAL DE DETALLES BLINDADO --- */}
+      {/* --- MODAL DE DETALLES BLINDADO CENTRADO --- */}
       {isDetailModalOpen && selectedItem && (
-        <div style={s.overlay} onClick={() => setIsDetailModalOpen(false)}>
+        <div style={s.overlayCentered} onClick={() => setIsDetailModalOpen(false)}>
           <div style={{...s.modal, ...(currentSettingView === 'place' ? s.modalWide : {})}} onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>{activeSettingOption?.label} Details</h3>
@@ -589,11 +734,11 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' }}>
                     <h4 style={{ margin: 0, color: '#111827', fontSize: '1rem' }}>Associated Tasks</h4>
-                    <button style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 500, cursor: 'pointer' }} onClick={() => setShowQuickAdd(!showQuickAdd)}>+ Add Task</button>
+                    <button style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 600, cursor: 'pointer' }} onClick={() => setShowQuickAdd(!showQuickAdd)}>+ Add Task</button>
                   </div>
 
                   <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <table className="responsive-settings-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                       <thead>
                         <tr><th style={thStyle}>TASK NAME</th><th style={{...thStyle, width: '100px', textAlign: 'right'}}>ACTION</th></tr>
                       </thead>
@@ -604,15 +749,15 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                         
                         {tasks.filter(t => t.placeId === selectedItem.id).map(t => (
                           <tr key={t.id}>
-                            <td style={tdStyle}>{t.name}</td>
-                            <td style={{...tdStyle, textAlign: 'right'}}><button style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 500, cursor: 'pointer' }} onClick={() => confirmDeleteTask(t.id)}>Remove</button></td>
+                            <td data-label="Task Name" style={tdStyle}>{t.name}</td>
+                            <td data-label="Action" style={{...tdStyle, textAlign: 'right'}}><button style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: 500, cursor: 'pointer' }} onClick={() => confirmDeleteTask(t.id)} disabled={isSaving}>{isSaving ? '...' : 'Remove'}</button></td>
                           </tr>
                         ))}
 
                         {showQuickAdd && (
                           <tr>
                             <td style={tdStyle}><input type="text" style={s.input} placeholder="Type new task and press Enter..." value={newTaskInput} onChange={(e) => setNewTaskInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleQuickAddTask(); } }} autoFocus /></td>
-                            <td style={{...tdStyle, textAlign: 'right'}}><button style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 500, cursor: 'pointer' }} onClick={handleQuickAddTask}>Save</button></td>
+                            <td style={{...tdStyle, textAlign: 'right'}}><button style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 600, cursor: 'pointer' }} onClick={handleQuickAddTask} disabled={isSaving}>Save</button></td>
                           </tr>
                         )}
                       </tbody>
@@ -620,7 +765,7 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                   </div>
                 </>
               ) : currentSettingView === 'tax' ? (
-                <div style={s.detailItem}><span style={s.detailLabel}>Current Tax</span><span style={s.detailValue}>{selectedItem.percentage}%</span></div>
+                <div style={s.detailItem}><span style={s.detailLabel}>Current Tax</span><span style={{...s.detailValue, fontSize: '1.5rem', color: '#3b82f6', fontWeight: 700}}>{selectedItem.percentage}%</span></div>
               ) : (
                 <>
                   {currentSettingView === 'status' && (
@@ -682,9 +827,9 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
         </div>
       )}
 
-      {/* --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN BLINDADO --- */}
+      {/* --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN BLINDADO CENTRADO --- */}
       {isDeleteModalOpen && (
-        <div style={s.overlay} onClick={() => setIsDeleteModalOpen(false)}>
+        <div style={s.overlayCentered} onClick={() => setIsDeleteModalOpen(false)}>
           <div style={s.modal} onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>Confirm Deletion</h3>
@@ -694,8 +839,8 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
               <p style={{ color: '#6b7280', fontSize: '0.95rem', margin: 0, lineHeight: 1.5 }}>Are you sure you want to delete this record? This action cannot be undone.</p>
             </div>
             <footer style={{...s.footer, justifyContent: 'flex-end'}}>
-              <button style={s.btnOutline} onClick={() => setIsDeleteModalOpen(false)}>Cancel</button>
-              <button style={{...s.btnPrimary, backgroundColor: '#ef4444'}} onClick={confirmDelete}>Delete</button>
+              <button style={s.btnOutline} onClick={() => setIsDeleteModalOpen(false)} disabled={isSaving}>Cancel</button>
+              <button style={{...s.btnPrimary, backgroundColor: '#ef4444'}} onClick={confirmDelete} disabled={isSaving}>{isSaving ? 'Deleting...' : 'Delete'}</button>
             </footer>
           </div>
         </div>

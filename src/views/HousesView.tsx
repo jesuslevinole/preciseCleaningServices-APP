@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Search, MapPin, Plus, X, Edit2, Trash2, 
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
   Bell, Briefcase, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import type { Property, Status, Team, Priority, Service } from '../types';
+
+// IMPORTAMOS NUESTRO SERVICIO DE FIREBASE (El que acabamos de corregir en el Paso 1)
+import { propertiesService } from '../services/propertiesService';
 
 const mockStatuses: Status[] = [
   { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#3b82f6' }, 
@@ -87,33 +90,52 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
+  
+  // Estado para manejar las cargas asíncronas de Firebase
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: '', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: ''
   });
 
+  // --- TRAER DATOS DE FIREBASE AL CARGAR LA VISTA ---
+  useEffect(() => {
+    const fetchProperties = async () => {
+      try {
+        setIsLoading(true);
+        const data = await propertiesService.getAll();
+        // Si hay datos en Firebase, sobreescribimos los mocks que venían por prop
+        if(data.length > 0) {
+          setProperties(data);
+        }
+      } catch (error) {
+        console.error("Error al cargar propiedades desde Firebase:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchProperties();
+  }, [setProperties]);
+
   // --- ESTILOS INLINE BLINDADOS ---
   const s = {
-    // Modales de Layout Base
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
     body: { padding: '30px', overflowY: 'auto' } as React.CSSProperties,
     footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
 
-    // Controles de Formulario
     label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' } as React.CSSProperties,
     inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', width: '100%' } as React.CSSProperties,
     icon: { position: 'absolute', left: '14px', color: '#6b7280', pointerEvents: 'none' } as React.CSSProperties,
     input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s' } as React.CSSProperties,
 
-    // Botones
-    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
+    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s', opacity: isSaving ? 0.7 : 1 } as React.CSSProperties,
     btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
     btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
     closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' },
 
-    // Estilos del Modal de Detalles
     detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
     detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } as React.CSSProperties,
     detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
@@ -121,7 +143,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
     noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', width: '100%' } as React.CSSProperties,
 
-    // Dashboard Base
     dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' },
     kpiCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' },
     kpiIconBox: (color: string) => ({ backgroundColor: `${color}15`, color: color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
@@ -129,7 +150,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' } as React.CSSProperties,
     pillBtn: (active: boolean) => ({ padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: active ? '#10b981' : 'transparent', color: active ? 'white' : '#6b7280', transition: 'all 0.2s', whiteSpace: 'nowrap' as const }),
 
-    // Tabla Configuración
     th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
     statusPill: (statusId: string) => {
@@ -157,16 +177,53 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setSelectedHouse(null);
   };
 
-  const handleSave = () => {
+  // --- FUNCIÓN ASÍNCRONA PARA GUARDAR EN FIREBASE ---
+  const handleSave = async () => {
     if (!formData.address) return alert("Address is required.");
     if (!formData.statusId) return alert("Status is required.");
 
-    if (selectedHouse) {
-      setProperties(properties.map(p => p.id === selectedHouse.id ? { ...formData } : p));
-    } else {
-      setProperties([...properties, { ...formData, id: `J-${1040 + properties.length}`, description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' }]);
+    setIsSaving(true);
+    try {
+      if (selectedHouse && selectedHouse.id) {
+        const { id, ...dataToUpdate } = formData; 
+        await propertiesService.update(selectedHouse.id, dataToUpdate);
+        setProperties(properties.map(p => p.id === selectedHouse.id ? { ...formData } : p));
+      } else {
+        const { id, ...dataToAdd } = formData; 
+        const completeData = {
+          ...dataToAdd,
+          description: `${formData.client} - ${formData.rooms} rooms`,
+          city: 'TBD',
+          size: 'TBD'
+        };
+
+        const newId = await propertiesService.create(completeData as unknown as Omit<Property, 'id'>);
+        setProperties([...properties, { ...formData, id: newId, description: completeData.description, city: completeData.city, size: completeData.size }]);
+      }
+      handleCloseForm();
+    } catch (error) {
+      console.error("Error al guardar:", error);
+      alert("Error al intentar guardar la propiedad en Firebase.");
+    } finally {
+      setIsSaving(false);
     }
-    handleCloseForm();
+  };
+
+  // --- FUNCIÓN ASÍNCRONA PARA ELIMINAR EN FIREBASE ---
+  const handleDelete = async () => {
+    if(!selectedHouse) return;
+    
+    setIsSaving(true);
+    try {
+      await propertiesService.delete(selectedHouse.id);
+      setProperties(properties.filter(p => p.id !== selectedHouse.id));
+      setIsDetailModalOpen(false);
+    } catch (error) {
+      console.error("Error al eliminar:", error);
+      alert("Hubo un error al intentar eliminar la propiedad.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleOpenDetail = (house: Property) => {
@@ -184,15 +241,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   return (
     <div className="fade-in" style={{ padding: '20px' }}>
 
-      {/* INYECCIÓN DE ESTILOS ESTRATÉGICOS */}
+      {/* INYECCIÓN DE ESTILOS ESTRATÉGICOS MEJORADA */}
       <style>{`
-        /* Overlay Centrado Absoluto: Reemplaza cualquier clase previa propensa a fallos */
+        /* Overlay Centrado Absoluto: Flexbox centrará el hijo automáticamente en ambas dimensiones */
         .modal-overlay-centered {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          inset: 0; 
           background-color: rgba(15, 23, 42, 0.6);
           backdrop-filter: blur(4px);
           display: flex;
@@ -200,19 +254,23 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           justify-content: center;
           z-index: 9999;
           padding: 20px;
+          box-sizing: border-box;
         }
 
-        /* Modal Dinámico (70% en PC, 95% en Móvil) perfectamente centrado */
+        /* Modal Dinámico (70% en PC, ancho total en Móvil) - Sin margin:auto problemático */
         .modal-70 {
           background-color: #ffffff;
-          width: 70%;
-          max-width: 1200px;
+          width: 100%;
+          max-width: 1000px;
           border-radius: 12px;
           box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
           display: flex;
           flex-direction: column;
           max-height: 90vh;
-          margin: auto;
+        }
+        
+        @media (min-width: 769px) {
+          .modal-70 { width: 70%; }
         }
 
         /* Rejilla Perfecta de 3 Columnas */
@@ -228,7 +286,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
         /* Conversión de Tabla a Tarjetas (Mobile First) */
         @media (max-width: 768px) {
-          .modal-70 { width: 95%; margin: 10px; }
           .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
           
           /* Esconder cabecera real de tabla */
@@ -269,7 +326,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             letter-spacing: 0.5px;
           }
 
-          /* Ajustes en los detalles del cliente para que no se amontone */
           .mobile-client-cell { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
         }
       `}</style>
@@ -306,7 +362,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           <div style={s.kpiIconBox('#10b981')}><Briefcase size={22} /></div>
           <div>
             <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>Trabajos hoy</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{properties.length}</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{isLoading ? '...' : properties.length}</div>
             <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>+3 vs ayer</div>
           </div>
         </div>
@@ -314,7 +370,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           <div style={s.kpiIconBox('#f59e0b')}><Clock size={22} /></div>
           <div>
             <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>En Proceso</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{properties.filter(p => p.statusId === '4').length}</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{isLoading ? '...' : properties.filter(p => p.statusId === '4').length}</div>
             <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>2 equipos activos</div>
           </div>
         </div>
@@ -322,7 +378,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           <div style={s.kpiIconBox('#8b5cf6')}><ShieldCheck size={22} /></div>
           <div>
             <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>QC Pendiente</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{properties.filter(p => p.statusId === '2').length}</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{isLoading ? '...' : properties.filter(p => p.statusId === '2').length}</div>
             <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Esperando revisión</div>
           </div>
         </div>
@@ -330,7 +386,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           <div style={s.kpiIconBox('#ef4444')}><AlertTriangle size={22} /></div>
           <div>
             <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>Recalls</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{properties.filter(p => p.statusId === '3').length}</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{isLoading ? '...' : properties.filter(p => p.statusId === '3').length}</div>
             <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Esta semana</div>
           </div>
         </div>
@@ -348,7 +404,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
-              {/* Filtros */}
               <div className="dashboard-filters">
                 <button onClick={() => setActiveFilter('Todos')} style={s.pillBtn(activeFilter === 'Todos')}>Todos</button>
                 <button onClick={() => setActiveFilter('Programado')} style={s.pillBtn(activeFilter === 'Programado')}>Programado</button>
@@ -357,7 +412,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
-            {/* TABLA RESPONSIVA (Modo Tarjetas en Móvil) */}
+            {/* TABLA RESPONSIVA */}
             <div style={{ overflowX: 'auto', padding: '10px 20px 20px 20px' }}>
               <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '100%' }}>
                 <thead>
@@ -372,7 +427,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </tr>
                 </thead>
                 <tbody>
-                  {properties.map((prop, idx) => {
+                  {isLoading ? (
+                    <tr><td colSpan={7} style={{textAlign: 'center', padding: '40px', color: '#6b7280'}}>Cargando trabajos...</td></tr>
+                  ) : properties.map((prop, idx) => {
                     const statusInfo = s.statusPill(prop.statusId);
                     const teamName = mockTeams.find(t => t.id === prop.teamId)?.name || 'Sin Asignar';
                     const serviceName = mockServices.find(srv => srv.id === prop.serviceId)?.name || 'Regular';
@@ -462,7 +519,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       </div>
 
-      {/* --- MODAL DE FORMULARIO (70% WIDTH & 3 COLUMN GRID) --- */}
+      {/* --- MODAL DE FORMULARIO (3 COLUMN GRID) --- */}
       {isFormModalOpen && (
         <div className="modal-overlay-centered" onClick={handleCloseForm}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -472,10 +529,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             </header>
 
             <div style={s.body}>
-              {/* Estructura CSS Grid */}
               <div className="grid-3-cols">
 
-                {/* Fila 1 */}
                 <div>
                   <label style={s.label}>Client</label>
                   <div style={s.inputWrapper}>
@@ -495,7 +550,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   <CustomSelect options={mockStatuses} value={formData.statusId} onChange={(val: string) => setFormData({ ...formData, statusId: val })} placeholder="Select Status..." icon={Activity} />
                 </div>
 
-                {/* Fila 2 */}
                 <div>
                   <label style={s.label}>Invoice Status</label>
                   <CustomSelect options={invoiceOptions} value={formData.invoiceStatus} onChange={(val: any) => setFormData({ ...formData, invoiceStatus: val })} placeholder="Select Invoice Status..." icon={FileText} />
@@ -509,7 +563,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   <CustomSelect options={mockPriorities} value={formData.priorityId} onChange={(val: string) => setFormData({ ...formData, priorityId: val })} placeholder="Select Priority..." icon={Flag} />
                 </div>
 
-                {/* Fila 3 */}
                 <div>
                   <label style={s.label}>Receive Date</label>
                   <div style={s.inputWrapper}>
@@ -529,7 +582,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   <CustomSelect options={mockTeams} value={formData.teamId} onChange={(val: string) => setFormData({ ...formData, teamId: val })} placeholder="Assign Team..." icon={Users} />
                 </div>
 
-                {/* Fila 4 */}
                 <div>
                   <label style={s.label}>Time In</label>
                   <div style={s.inputWrapper}>
@@ -549,7 +601,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   <CustomSelect options={roomOptions} value={formData.rooms} onChange={(val: string) => setFormData({ ...formData, rooms: val })} placeholder="Rooms..." icon={Hash} />
                 </div>
                 
-                {/* Fila 5 */}
                 <div>
                   <label style={s.label}>Bathrooms</label>
                   <CustomSelect options={roomOptions} value={formData.bathrooms} onChange={(val: string) => setFormData({ ...formData, bathrooms: val })} placeholder="Bathrooms..." icon={Hash} />
@@ -575,14 +626,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             </div>
             
             <footer style={s.footer}>
-              <button style={s.btnOutline} onClick={handleCloseForm}>Cancel</button>
-              <button style={s.btnPrimary} onClick={handleSave}>Save Property</button>
+              <button style={s.btnOutline} onClick={handleCloseForm} disabled={isSaving}>Cancel</button>
+              <button style={s.btnPrimary} onClick={handleSave} disabled={isSaving}>
+                {isSaving ? 'Guardando...' : 'Save Property'}
+              </button>
             </footer>
           </div>
         </div>
       )}
 
-      {/* --- MODAL DE DETALLES (70% WIDTH & 3 COLUMN GRID) --- */}
+      {/* --- MODAL DE DETALLES (3 COLUMN GRID) --- */}
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -599,7 +652,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
               </div>
 
-              {/* Estructura CSS Grid para Detalles */}
               <div className="grid-3-cols">
 
                 <div style={s.detailItem}>
@@ -681,11 +733,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             </div>
 
             <footer style={s.footerBetween}>
-              <button style={s.btnDangerLight} onClick={() => {
-                setProperties(properties.filter(p => p.id !== selectedHouse.id));
-                setIsDetailModalOpen(false);
-              }}>
-                <Trash2 size={16} style={{ marginRight: '6px' }} /> Delete Property
+              <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}>
+                <Trash2 size={16} style={{ marginRight: '6px' }} /> {isSaving ? 'Borrando...' : 'Delete Property'}
               </button>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
