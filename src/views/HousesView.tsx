@@ -19,10 +19,14 @@ const collectionMap: Record<string, string> = {
   service: 'settings_services',
 };
 
-// Custom Responsive Select Component (Fixed to handle IDs correctly)
+// --- CUSTOM SELECTORS ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  const selected = options.find((o: any) => o.id === value || o.name === value);
+  const safeValue = String(value || '').toLowerCase().trim();
+  const selected = options.find((o: any) => 
+    String(o.id).toLowerCase().trim() === safeValue || 
+    String(o.name).toLowerCase().trim() === safeValue
+  );
 
   return (
     <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
@@ -49,7 +53,7 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
             <div 
               key={o.id} 
               style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
-              onMouseDown={(e) => { e.preventDefault(); onChange(o[returnKey]); setIsOpen(false); }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(o[returnKey] || o.id); setIsOpen(false); }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
@@ -63,13 +67,76 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
   );
 };
 
-// Helper function for backward compatibility (reading both ID and Name)
+// --- INLINE STATUS PILL SELECTOR (NUEVO: Acciones rápidas) ---
+const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: { currentStatusId: string, statuses: Status[], onChange: (id: string) => void, disabled: boolean }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const safeValue = String(currentStatusId || '').toLowerCase().trim();
+  const status = statuses.find(s => String(s.id).toLowerCase().trim() === safeValue || String(s.name).toLowerCase().trim() === safeValue);
+  
+  const bg = status ? `${status.color}15` : '#f1f5f9';
+  const color = status ? status.color : '#64748b';
+  const text = status ? status.name : 'Unassigned';
+
+  return (
+    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', display: 'inline-block', outline: 'none' }}>
+      <div 
+        onClick={(e) => { e.stopPropagation(); if(!disabled) setIsOpen(!isOpen); }}
+        style={{ 
+          backgroundColor: bg, color: color, padding: '4px 10px', borderRadius: '12px', 
+          fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px',
+          cursor: disabled ? 'not-allowed' : 'pointer', border: `1px solid ${color}30`, transition: 'all 0.2s'
+        }}
+      >
+        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: color }}></span>
+        {text}
+        <ChevronDown size={12} style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+      </div>
+
+      {isOpen && (
+        <div style={{ 
+          position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'white', 
+          border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', 
+          zIndex: 9999, minWidth: '160px', overflow: 'hidden', textAlign: 'left'
+        }}>
+          {statuses.map((s) => (
+            <div 
+              key={s.id}
+              onMouseDown={(e) => { 
+                e.preventDefault(); 
+                e.stopPropagation();
+                if(s.id !== currentStatusId && s.name !== currentStatusId) onChange(s.id); 
+                setIsOpen(false); 
+              }}
+              style={{ 
+                padding: '10px 14px', fontSize: '0.8rem', fontWeight: 600, color: s.color, 
+                display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
+                backgroundColor: (currentStatusId === s.id || currentStatusId === s.name) ? `${s.color}15` : 'transparent'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = (currentStatusId === s.id || currentStatusId === s.name) ? `${s.color}15` : 'transparent'}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: s.color }}></span>
+              {s.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Helper Functions
 const getRelationName = (list: any[], idOrName: string, fallback = '-') => {
-  return list.find(item => item.id === idOrName || item.name === idOrName)?.name || fallback;
+  if (!idOrName) return fallback;
+  const safeVal = String(idOrName).toLowerCase().trim();
+  const found = list.find(item => String(item.id).toLowerCase().trim() === safeVal || String(item.name).toLowerCase().trim() === safeVal);
+  return found ? found.name : fallback;
 };
 
 const getRelationColor = (list: any[], idOrName: string) => {
-  return list.find(item => item.id === idOrName || item.name === idOrName)?.color;
+  if (!idOrName) return undefined;
+  const safeVal = String(idOrName).toLowerCase().trim();
+  return list.find(item => String(item.id).toLowerCase().trim() === safeVal || String(item.name).toLowerCase().trim() === safeVal)?.color;
 };
 
 interface HousesViewProps {
@@ -105,14 +172,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        const [
-          propsData,
-          statusData,
-          teamData,
-          prioData,
-          servData,
-          custData
-        ] = await Promise.all([
+        const [ propsData, statusData, teamData, prioData, servData, custData ] = await Promise.all([
           propertiesService.getAll(),
           settingsService.getAll(collectionMap.status),
           settingsService.getAll(collectionMap.team),
@@ -137,11 +197,32 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     fetchAllData();
   }, [setProperties]);
 
+  // --- QUICK INLINE STATUS CHANGE LOGIC ---
+  const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
+    setIsSaving(true);
+    try {
+      // Background update in Firebase
+      await propertiesService.update(propertyId, { statusId: newStatusId });
+      // Instant Optimistic Update in UI
+      setProperties(properties.map(p => p.id === propertyId ? { ...p, statusId: newStatusId } : p));
+      
+      // Update the Detail Modal state if it's currently open
+      if (selectedHouse && selectedHouse.id === propertyId) {
+        setSelectedHouse({ ...selectedHouse, statusId: newStatusId });
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to update job status.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // --- SECURE INLINE STYLES ---
   const s = {
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
-    body: { padding: '30px', overflowY: 'auto' } as React.CSSProperties,
+    body: { padding: '30px', overflowY: 'auto', paddingBottom: '60px' } as React.CSSProperties, // Padding bottom for dropdown safety
     footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
 
@@ -171,15 +252,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
     th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
-    
-    // Dynamic Status Pill
-    statusPill: (statusId: string) => {
-      const status = statuses.find(s => s.id === statusId || s.name === statusId);
-      if (status) {
-        return { bg: `${status.color}15`, color: status.color, text: status.name };
-      }
-      return { bg: '#f1f5f9', color: '#64748b', text: 'Unassigned' };
-    }
   };
 
   const handleOpenForm = (house?: Property) => {
@@ -199,7 +271,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setSelectedHouse(null);
   };
 
-  // --- AUTOCOMPLETE LOGIC FOR ADDRESS BASED ON CLIENT ---
   const handleCustomerSelect = (customerName: string) => {
     const selectedCust = customersList.find(c => c.name === customerName);
     if (selectedCust) {
@@ -216,7 +287,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const handleSave = async () => {
     if (!formData.client) return alert("Client is required.");
     if (!formData.address) return alert("Address is required.");
-    if (!formData.statusId) return alert("Status is required.");
 
     setIsSaving(true);
     try {
@@ -247,6 +317,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   const handleDelete = async () => {
     if(!selectedHouse) return;
+    
     setIsSaving(true);
     try {
       await propertiesService.delete(selectedHouse.id);
@@ -265,7 +336,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setIsDetailModalOpen(true);
   };
 
-  // Dynamic Table Filter
   const filteredProperties = activeFilter === 'All' 
     ? properties 
     : properties.filter(p => {
@@ -361,7 +431,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
       </header>
 
-      {/* KPI CARDS (Dynamic Firebase Statuses) */}
+      {/* KPI CARDS */}
       <div className="dash-grid">
         {isLoading ? (
           <div style={{ color: '#6b7280' }}>Loading metrics...</div>
@@ -387,14 +457,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
         {/* LEFT COLUMN: DAILY JOBS */}
         <div className="left-col">
-          <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'visible' }}>
             <div style={s.tableHeader}>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Daily Jobs</h2>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
-              {/* DYNAMIC FIREBASE FILTERS */}
               <div className="dashboard-filters">
                 <button onClick={() => setActiveFilter('All')} style={s.pillBtn(activeFilter === 'All')}>All</button>
                 {statuses.map(st => (
@@ -405,8 +474,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
-            {/* RESPONSIVE TABLE (Actions in first column, ID removed) */}
-            <div style={{ overflowX: 'auto', padding: '10px 20px 20px 20px' }}>
+            {/* RESPONSIVE TABLE WITH INLINE STATUS CHANGE */}
+            <div style={{ overflowX: 'auto', padding: '10px 20px 40px 20px', minHeight: '300px' }}>
               <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '100%' }}>
                 <thead>
                   <tr>
@@ -424,7 +493,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   ) : filteredProperties.length === 0 ? (
                     <tr><td colSpan={6} style={{textAlign: 'center', padding: '40px', color: '#6b7280', fontStyle: 'italic'}}>No jobs to display.</td></tr>
                   ) : filteredProperties.map((prop) => {
-                    const statusInfo = s.statusPill(prop.statusId);
                     const teamName = getRelationName(teams, prop.teamId, 'Unassigned');
                     const serviceName = getRelationName(services, prop.serviceId, 'Regular');
 
@@ -461,11 +529,15 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                         <td data-label="Time" style={{ ...s.td, color: '#6b7280' }}><Clock size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} /> {prop.timeIn || '08:00 AM'}</td>
                         <td data-label="Type" style={{ ...s.td, fontWeight: 500 }}>{serviceName}</td>
                         <td data-label="Team" style={{ ...s.td, color: '#6b7280' }}>{teamName}</td>
+                        
+                        {/* THE NEW INLINE STATUS CHANGING PILL */}
                         <td data-label="Status" style={{ ...s.td, textAlign: 'right' }}>
-                          <span style={{ backgroundColor: statusInfo.bg, color: statusInfo.color, padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusInfo.color }}></span>
-                            {statusInfo.text}
-                          </span>
+                          <StatusPillSelector 
+                            currentStatusId={prop.statusId} 
+                            statuses={statuses} 
+                            onChange={(newId) => handleQuickStatusChange(prop.id, newId)} 
+                            disabled={isSaving} 
+                          />
                         </td>
                       </tr>
                     );
@@ -518,7 +590,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       </div>
 
-      {/* --- FORM MODAL (3 COLUMN GRID) --- */}
+      {/* --- FORM MODAL --- */}
       {isFormModalOpen && (
         <div className="modal-overlay-centered" onClick={handleCloseForm}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -530,7 +602,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <div style={s.body}>
               <div className="grid-3-cols">
 
-                {/* FIREBASE CLIENT SELECTION (Autocomplete Address) */}
                 <div>
                   <label style={s.label}>Client <span style={{ color: '#3b82f6' }}>*</span></label>
                   <CustomSelect 
@@ -539,7 +610,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     onChange={handleCustomerSelect} 
                     placeholder="Select Client..." 
                     icon={User} 
-                    returnKey="name" // Especial para cliente, guardamos el nombre
+                    returnKey="name" 
                   />
                 </div>
                 <div>
@@ -639,7 +710,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
       )}
 
-      {/* --- DETAIL MODAL (3 COLUMN GRID) --- */}
+      {/* --- DETAIL MODAL --- */}
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -660,9 +731,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    <span style={{ backgroundColor: getRelationColor(statuses, selectedHouse.statusId) || '#ccc', width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
-                    <span style={s.detailValue}>{getRelationName(statuses, selectedHouse.statusId, 'UNASSIGNED')}</span>
+                  <div style={{ marginTop: '4px' }}>
+                    <StatusPillSelector 
+                      currentStatusId={selectedHouse.statusId} 
+                      statuses={statuses} 
+                      onChange={(newId: string) => handleQuickStatusChange(selectedHouse.id, newId)} 
+                      disabled={isSaving} 
+                    />
                   </div>
                 </div>
                 <div style={s.detailItem}>
@@ -742,12 +817,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </button>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
+                
                 <button 
                   onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
                 >
                   <ClipboardCheck size={16} /> Quality Check
                 </button>
+
                 <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>
               </div>
             </footer>
