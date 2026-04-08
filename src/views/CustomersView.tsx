@@ -1,25 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Search, SlidersHorizontal, Plus, Edit2, Trash2, X,
   User, Briefcase, Building, Mail, MapPin, Map, StickyNote, Palette
 } from 'lucide-react';
 import type { Customer } from '../types';
 
-// Datos de prueba
-const initialCustomers: Customer[] = [
-  { id: '1', color: '#ef4444', type: 'Property manager', name: 'Linnemann', business: 'Regular', note: '', address: '3402 S W S Young Dr', cityStateZip: 'Killeen, Texas 76542', email: 'linnemann@example.com' },
-  { id: '2', color: '#a855f7', type: 'Property manager', name: 'Isbell Rentals', business: 'Regular', note: '', address: '1200 E Stan Schlueter Loop', cityStateZip: 'Killeen, Texas 76542', email: '' },
-  { id: '3', color: '#f97316', type: 'Property manager', name: 'Impact Communities', business: 'Regular', note: '', address: '1110 Indian Trail', cityStateZip: 'Harker Heights, TX 76548', email: 'tx.indianmhpteam@...' },
-  { id: '4', color: '#e5e7eb', type: 'Private customer', name: 'David (Green Giant) Private', business: 'Regular', note: 'Only Clean from Living room to...', address: '2607 Green Giant Dr', cityStateZip: 'Harker Heights, TX 76548', email: '' },
-  { id: '5', color: '#e5e7eb', type: 'Private customer', name: 'Shaneque Frett Private', business: 'Regular', note: 'Airbnb Customer', address: '903 Mclintock Cove', cityStateZip: 'Killeen, TX', email: 'shanequeeddy@gmail.com' }
-];
+// IMPORTACIÓN DEL SERVICIO DE FIREBASE
+import { customersService } from '../services/customersService';
 
 interface CustomersViewProps {
   onOpenMenu: () => void;
 }
 
 export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
-  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
+  // Inicializa vacío para poblar desde Firebase
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  
+  // Estados de carga
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -30,42 +30,60 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
     id: '', color: '#e5e7eb', type: 'Property manager', name: '', business: 'Regular', note: '', address: '', cityStateZip: '', email: ''
   });
 
-  // --- ESTILOS BLINDADOS (TABLA) ---
-  const thStyle = { backgroundColor: '#f9fafb', padding: '6px 12px', color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb', textAlign: 'left' as const };
-  const tdStyle = { padding: '6px 12px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontSize: '0.95rem' };
+  // --- CARGA INICIAL DESDE FIREBASE ---
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      setIsLoading(true);
+      try {
+        const data = await customersService.getAll();
+        if (data) setCustomers(data);
+      } catch (error) {
+        console.error("Error fetching customers:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchCustomers();
+  }, []);
 
-  // --- ESTILOS BLINDADOS (MODALES Y FORMULARIOS) ---
+  // --- ESTILOS BLINDADOS (TABLA Y MODALES) ---
+  const thStyle = { backgroundColor: '#f9fafb', padding: '12px 16px', color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb', textAlign: 'left' as const, whiteSpace: 'nowrap' as const };
+  const tdStyle = { padding: '16px 12px', borderBottom: '1px solid #e5e7eb', color: '#111827', fontSize: '0.95rem', verticalAlign: 'middle' as const };
+
   const s = {
-    overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', overflowY: 'auto', boxSizing: 'border-box' } as React.CSSProperties,
-    modalWide: { backgroundColor: '#ffffff', width: '100%', maxWidth: '950px', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' } as React.CSSProperties,
-    modalSmall: { backgroundColor: '#ffffff', width: '100%', maxWidth: '450px', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' } as React.CSSProperties,
+    // Overlay Centrado Absoluto (Fix para que no se mueva a la derecha)
+    overlayCentered: { position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', boxSizing: 'border-box' } as React.CSSProperties,
+    modalWide: { backgroundColor: '#ffffff', width: '100%', maxWidth: '950px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' } as React.CSSProperties,
+    modalSmall: { backgroundColor: '#ffffff', width: '100%', maxWidth: '450px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' } as React.CSSProperties,
+    
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.15rem', fontWeight: 600, color: '#111827', margin: 0 },
     body: { padding: '30px', overflowY: 'auto' } as React.CSSProperties,
     footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     
-    // Formularios
+    // Formularios Grid/Flex
     flexRow: { display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' } as React.CSSProperties,
     flex1: { flex: '1 1 250px', display: 'flex', flexDirection: 'column', gap: '6px' } as React.CSSProperties,
     flex2: { flex: '2 1 500px', display: 'flex', flexDirection: 'column', gap: '6px' } as React.CSSProperties,
     flexFull: { flex: '1 1 100%', display: 'flex', flexDirection: 'column', gap: '6px' } as React.CSSProperties,
     
-    label: { fontSize: '0.9rem', color: '#6b7280', fontWeight: 500 },
+    label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' } as React.CSSProperties,
     inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', width: '100%' } as React.CSSProperties,
     icon: { position: 'absolute', left: '14px', color: '#6b7280', pointerEvents: 'none' } as React.CSSProperties,
-    input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' } as React.CSSProperties,
+    // input con fondo obligatoriamente blanco
+    input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'all 0.2s' } as React.CSSProperties,
     
     // Botones
-    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
-    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
-    btnDanger: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
+    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
+    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
+    btnDanger: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
     closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex' },
     
     // Detalles
     detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
     detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', flex: '1 1 200px' } as React.CSSProperties,
-    detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
+    detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
     detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
     noteBox: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', flex: '1 1 100%' } as React.CSSProperties
   };
@@ -87,14 +105,30 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
     setSelectedCustomer(null);
   };
 
-  const handleSave = () => {
+  // --- GUARDADO ASÍNCRONO ---
+  const handleSave = async () => {
     if (formData.name.trim() === '') return alert('Customer Name is required.');
-    if (selectedCustomer) {
-      setCustomers(customers.map(c => c.id === selectedCustomer.id ? { ...formData } : c));
-    } else {
-      setCustomers([...customers, { ...formData, id: Date.now().toString() }]);
+    
+    setIsSaving(true);
+    try {
+      if (selectedCustomer && selectedCustomer.id) {
+        // Actualizar
+        const { id, ...dataToUpdate } = formData;
+        await customersService.update(selectedCustomer.id, dataToUpdate);
+        setCustomers(customers.map(c => c.id === selectedCustomer.id ? { ...formData } : c));
+      } else {
+        // Crear
+        const { id, ...dataToAdd } = formData;
+        const newId = await customersService.create(dataToAdd);
+        setCustomers([...customers, { ...formData, id: newId }]);
+      }
+      handleCloseForm();
+    } catch (error) {
+      console.error("Error al guardar:", error);
+      alert("Hubo un error al guardar el cliente.");
+    } finally {
+      setIsSaving(false);
     }
-    handleCloseForm();
   };
 
   const handleOpenDetail = (customer: Customer) => {
@@ -107,18 +141,68 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
     setIsDeleteModalOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (itemToDelete) {
+  // --- ELIMINADO ASÍNCRONO ---
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    
+    setIsSaving(true);
+    try {
+      await customersService.delete(itemToDelete);
       setCustomers(customers.filter(c => c.id !== itemToDelete));
       setItemToDelete(null);
       setIsDeleteModalOpen(false);
       setIsDetailModalOpen(false);
+    } catch (error) {
+      console.error("Error al eliminar:", error);
+      alert("Hubo un error al intentar eliminar el cliente.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
   return (
-    <div className="fade-in">
-      <header className="main-header">
+    <div className="fade-in" style={{ padding: '20px' }}>
+      
+      {/* CSS PARA TABLA RESPONSIVA Y MODALES MÓVILES */}
+      <style>{`
+        @media (max-width: 768px) {
+          .responsive-customer-table thead { display: none; }
+          .responsive-customer-table tr {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            padding: 16px;
+            background: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+          }
+          .responsive-customer-table td {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0 !important;
+            border-bottom: 1px solid #f1f5f9 !important;
+            text-align: right;
+            white-space: normal !important;
+          }
+          .responsive-customer-table td:last-child { border-bottom: none !important; padding-bottom: 0 !important; }
+          .responsive-customer-table td::before {
+            content: attr(data-label);
+            font-weight: 700;
+            color: #6b7280;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 16px;
+          }
+          
+          /* Centrar acciones en móvil */
+          .mobile-actions { justify-content: flex-end; width: 100%; }
+        }
+      `}</style>
+
+      <header className="main-header" style={{ marginBottom: '24px' }}>
         <div className="header-titles">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Abrir menú" style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }}>
@@ -128,24 +212,24 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
                 <line x1="3" y1="18" x2="21" y2="18"></line>
               </svg>
             </button>
-            <h1 style={{ margin: 0 }}>Customers</h1>
+            <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#111827' }}>Customers</h1>
           </div>
-          <p style={{ marginTop: '4px', color: '#6b7280' }}>{customers.length} registered customers</p>
+          <p style={{ marginTop: '4px', color: '#6b7280' }}>{isLoading ? '...' : customers.length} registered customers</p>
         </div>
-        <div className="header-actions">
-          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 16px', height: '42px', transition: 'all 0.2s ease' }}>
+        <div className="header-actions" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 16px', height: '42px', transition: 'all 0.2s ease', flex: 1, minWidth: '200px' }}>
             <Search size={18} color="#64748b" />
-            <input type="text" placeholder="Search customers..." style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', padding: '10px', fontSize: '0.95rem', width: '250px', color: '#1e293b' }} />
+            <input type="text" placeholder="Search customers..." style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', padding: '10px', fontSize: '0.95rem', width: '100%', color: '#1e293b' }} />
           </div>
-          <button className="btn-filter" style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '0 16px', height: '42px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, color: '#111827' }}><SlidersHorizontal size={16} /> Filters</button>
-          <button className="btn-primary" onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '8px', fontWeight: 500, cursor: 'pointer' }}><Plus size={18} /> Add Customer</button>
+          <button style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '0 16px', height: '42px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, color: '#111827' }}><SlidersHorizontal size={16} /> Filters</button>
+          <button onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}><Plus size={18} /> Add Customer</button>
         </div>
       </header>
 
-      {/* TABLA BLINDADA Y COMPACTA */}
-      <div className="fade-in" style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', width: '100%', overflow: 'hidden' }}>
+      {/* TABLA BLINDADA Y RESPONSIVA */}
+      <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', width: '100%', overflow: 'hidden', padding: '10px' }}>
         <div style={{ overflowX: 'auto', width: '100%' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1000px' }}>
+          <table className="responsive-customer-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1000px' }}>
             <thead>
               <tr>
                 <th style={{ ...thStyle, width: '40px', textAlign: 'center' }}>C...</th>
@@ -160,39 +244,42 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
               </tr>
             </thead>
             <tbody>
-              {customers.map((customer) => (
-                <tr key={customer.id} onClick={() => handleOpenDetail(customer)} style={{ cursor: 'pointer', transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    <span style={{ backgroundColor: customer.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%' }}></span>
-                  </td>
-                  <td style={{ ...tdStyle, color: '#6b7280' }}>{customer.type}</td>
-                  <td style={{ ...tdStyle, fontWeight: '600' }}>{customer.name}</td>
-                  <td style={tdStyle}>{customer.business}</td>
-                  <td style={{ ...tdStyle, color: '#6b7280', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {customer.note || '-'}
-                  </td>
-                  <td style={tdStyle}>{customer.address || '-'}</td>
-                  <td style={tdStyle}>{customer.cityStateZip || '-'}</td>
-                  <td style={tdStyle}>{customer.email || '-'}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
-                      <button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(customer); }}><Edit2 size={16} /></button>
-                      <button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(customer.id); }}><Trash2 size={16} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {customers.length === 0 && (
-                <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280', fontStyle: 'italic', padding: '30px' }}>No customers found.</td></tr>
+              {isLoading ? (
+                <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280', padding: '40px' }}>Cargando clientes...</td></tr>
+              ) : customers.length === 0 ? (
+                <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280', fontStyle: 'italic', padding: '40px' }}>No hay clientes registrados.</td></tr>
+              ) : (
+                customers.map((customer) => (
+                  <tr key={customer.id} onClick={() => handleOpenDetail(customer)} style={{ cursor: 'pointer', transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                    <td data-label="Color" style={{ ...tdStyle, textAlign: 'center' }}>
+                      <span style={{ backgroundColor: customer.color, display: 'inline-block', width: '14px', height: '14px', borderRadius: '50%' }}></span>
+                    </td>
+                    <td data-label="Type" style={{ ...tdStyle, color: '#6b7280' }}>{customer.type}</td>
+                    <td data-label="Name" style={{ ...tdStyle, fontWeight: '600' }}>{customer.name}</td>
+                    <td data-label="Business" style={tdStyle}>{customer.business}</td>
+                    <td data-label="Note" style={{ ...tdStyle, color: '#6b7280', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {customer.note || '-'}
+                    </td>
+                    <td data-label="Address" style={tdStyle}>{customer.address || '-'}</td>
+                    <td data-label="City/State/Zip" style={tdStyle}>{customer.cityStateZip || '-'}</td>
+                    <td data-label="Email" style={{...tdStyle, color: '#3b82f6'}}>{customer.email || '-'}</td>
+                    <td data-label="Actions" style={{ ...tdStyle, textAlign: 'right' }}>
+                      <div className="mobile-actions" style={{ display: 'flex', gap: '4px' }}>
+                        <button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(customer); }}><Edit2 size={18} /></button>
+                        <button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(customer.id); }}><Trash2 size={18} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* --- MODAL DE FORMULARIO BLINDADO --- */}
+      {/* --- MODAL DE FORMULARIO BLINDADO (CENTRADO Y FONDOS BLANCOS) --- */}
       {isFormModalOpen && (
-        <div style={s.overlay} onClick={handleCloseForm}>
+        <div style={s.overlayCentered} onClick={handleCloseForm}>
           <div style={s.modalWide} onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>{selectedCustomer ? 'Edit Customer Profile' : 'Register New Customer'}</h3>
@@ -292,16 +379,16 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
             </div>
             
             <footer style={s.footer}>
-              <button style={s.btnOutline} onClick={handleCloseForm}>Cancel</button>
-              <button style={s.btnPrimary} onClick={handleSave}>Save Customer</button>
+              <button style={s.btnOutline} onClick={handleCloseForm} disabled={isSaving}>Cancel</button>
+              <button style={s.btnPrimary} onClick={handleSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Customer'}</button>
             </footer>
           </div>
         </div>
       )}
 
-      {/* --- MODAL DE DETALLES BLINDADO --- */}
+      {/* --- MODAL DE DETALLES BLINDADO CENTRADO --- */}
       {isDetailModalOpen && selectedCustomer && (
-        <div style={s.overlay} onClick={() => setIsDetailModalOpen(false)}>
+        <div style={s.overlayCentered} onClick={() => setIsDetailModalOpen(false)}>
           <div style={s.modalWide} onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>Customer Overview</h3>
@@ -320,14 +407,17 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
                 </div>
                 <div style={s.detailItem}>
                   <span style={{...s.detailLabel, color: '#1e40af'}}><Briefcase size={14} /> ACCOUNT TYPE</span>
-                  <span style={{ fontSize: '1.1rem', color: '#1e3a8a', marginTop: '4px' }}>{selectedCustomer.type}</span>
+                  <span style={{ fontSize: '1.1rem', color: '#1e3a8a', marginTop: '4px', fontWeight: 500 }}>{selectedCustomer.type}</span>
                 </div>
               </div>
 
               <div style={s.flexRow}>
                 <div style={s.flex1}>
                   <span style={s.detailLabel}><Palette size={14} /> HEX COLOR</span>
-                  <span style={s.detailValue}>{selectedCustomer.color.toUpperCase()}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                    <span style={{ backgroundColor: selectedCustomer.color, width: '16px', height: '16px', borderRadius: '50%', display: 'inline-block' }}></span>
+                    <span style={{...s.detailValue, fontFamily: 'monospace'}}>{selectedCustomer.color.toUpperCase()}</span>
+                  </div>
                 </div>
                 
                 <div style={s.flex1}>
@@ -337,7 +427,7 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
                 
                 <div style={s.flex1}>
                   <span style={s.detailLabel}><Mail size={14} /> EMAIL</span>
-                  <span style={s.detailValue}>{selectedCustomer.email || '-'}</span>
+                  <span style={{...s.detailValue, color: '#3b82f6'}}>{selectedCustomer.email || '-'}</span>
                 </div>
               </div>
 
@@ -363,8 +453,8 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
             </div>
             
             <footer style={s.footerBetween}>
-              <button style={s.btnDanger} onClick={() => handleDeleteClick(selectedCustomer.id)}>
-                <Trash2 size={16} /> Delete Customer
+              <button style={s.btnDanger} onClick={() => handleDeleteClick(selectedCustomer.id)} disabled={isSaving}>
+                <Trash2 size={16} /> {isSaving ? 'Deleting...' : 'Delete Customer'}
               </button>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
@@ -375,9 +465,9 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
         </div>
       )}
 
-      {/* --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN BLINDADO --- */}
+      {/* --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN BLINDADO CENTRADO --- */}
       {isDeleteModalOpen && (
-        <div style={s.overlay} onClick={() => setIsDeleteModalOpen(false)}>
+        <div style={s.overlayCentered} onClick={() => setIsDeleteModalOpen(false)}>
           <div style={s.modalSmall} onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>Confirm Deletion</h3>
@@ -387,8 +477,8 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
               <p style={{ color: '#6b7280', fontSize: '0.95rem', margin: 0, lineHeight: 1.5 }}>Are you sure you want to delete this customer? This action cannot be undone.</p>
             </div>
             <footer style={s.footer}>
-              <button style={s.btnOutline} onClick={() => setIsDeleteModalOpen(false)}>Cancel</button>
-              <button style={{...s.btnPrimary, backgroundColor: '#ef4444'}} onClick={confirmDelete}>Delete</button>
+              <button style={s.btnOutline} onClick={() => setIsDeleteModalOpen(false)} disabled={isSaving}>Cancel</button>
+              <button style={{...s.btnPrimary, backgroundColor: '#ef4444'}} onClick={confirmDelete} disabled={isSaving}>{isSaving ? 'Deleting...' : 'Delete'}</button>
             </footer>
           </div>
         </div>
