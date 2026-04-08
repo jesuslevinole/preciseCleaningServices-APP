@@ -6,12 +6,12 @@ import {
 } from 'lucide-react';
 import type { Property, Status, Team, Priority, Service, Customer } from '../types';
 
-// IMPORTAMOS LOS SERVICIOS DE FIREBASE
+// FIREBASE SERVICES
 import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
-import { customersService } from '../services/customersService'; // <-- Nuevo servicio inyectado
+import { customersService } from '../services/customersService';
 
-// Mapeo de colecciones de Settings
+// Settings Collections Map
 const collectionMap: Record<string, string> = {
   team: 'settings_teams',
   priority: 'settings_priorities',
@@ -19,10 +19,10 @@ const collectionMap: Record<string, string> = {
   service: 'settings_services',
 };
 
-// Selector personalizado y responsivo
+// Custom Responsive Select Component
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  const selected = options.find((o: any) => o.id === value || o.name === value); // Modificado para aceptar 'name' en caso de clientes/servicios
+  const selected = options.find((o: any) => o.id === value || o.name === value);
 
   return (
     <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
@@ -49,7 +49,6 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
             <div 
               key={o.id} 
               style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
-              // Si es cliente pasamos el nombre, si es configuración pasamos el ID
               onMouseDown={(e) => { e.preventDefault(); onChange(o.name || o.id); setIsOpen(false); }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -73,17 +72,17 @@ interface HousesViewProps {
 
 export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse }: HousesViewProps) {
   
-  const [activeFilter, setActiveFilter] = useState('Todos');
+  const [activeFilter, setActiveFilter] = useState('All');
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
   
-  // --- ESTADOS DINÁMICOS DESDE FIREBASE ---
+  // --- FIREBASE STATES ---
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [priorities, setPriorities] = useState<Priority[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-  const [customersList, setCustomersList] = useState<Customer[]>([]); // Nuevo estado para clientes
+  const [customersList, setCustomersList] = useState<Customer[]>([]); 
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,12 +91,11 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: ''
   });
 
-  // --- TRAER DATOS DE FIREBASE AL CARGAR LA VISTA ---
+  // --- FETCH DATA FROM FIREBASE ON MOUNT ---
   useEffect(() => {
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        // Carga paralela de Trabajos, Configuraciones y CLIENTES
         const [
           propsData,
           statusData,
@@ -111,7 +109,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           settingsService.getAll(collectionMap.team),
           settingsService.getAll(collectionMap.priority),
           settingsService.getAll(collectionMap.service),
-          customersService.getAll() // Carga real de clientes
+          customersService.getAll() 
         ]);
 
         if (propsData) setProperties(propsData);
@@ -122,7 +120,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         if (custData) setCustomersList(custData);
 
       } catch (error) {
-        console.error("Error al cargar datos desde Firebase:", error);
+        console.error("Error loading data from Firebase:", error);
       } finally {
         setIsLoading(false);
       }
@@ -130,7 +128,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     fetchAllData();
   }, [setProperties]);
 
-  // --- ESTILOS INLINE BLINDADOS ---
+  // --- SECURE INLINE STYLES ---
   const s = {
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
@@ -165,7 +163,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
     
-    // Píldora Dinámica según Firebase
+    // Dynamic Status Pill
     statusPill: (statusId: string) => {
       const status = statuses.find(s => s.id === statusId);
       if (status) {
@@ -179,7 +177,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     if (house) {
       setFormData(house);
     } else {
-      // Intentamos seleccionar el primer estado por defecto para evitar errores
       const defaultStatus = statuses.length > 0 ? statuses[0].id : '';
       setFormData({ id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '' });
     }
@@ -193,7 +190,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setSelectedHouse(null);
   };
 
-  // --- LÓGICA DE AUTOCOMPLETADO DE CLIENTE ---
+  // --- AUTOCOMPLETE LOGIC FOR ADDRESS BASED ON CLIENT ---
   const handleCustomerSelect = (customerName: string) => {
     const selectedCust = customersList.find(c => c.name === customerName);
     
@@ -201,7 +198,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       setFormData({
         ...formData,
         client: customerName,
-        address: selectedCust.address || formData.address // Autocompleta la dirección si el cliente la tiene registrada
+        address: selectedCust.address || formData.address 
       });
     } else {
       setFormData({ ...formData, client: customerName });
@@ -233,8 +230,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       }
       handleCloseForm();
     } catch (error) {
-      console.error("Error al guardar:", error);
-      alert("Error al intentar guardar la propiedad en Firebase.");
+      console.error("Error saving to Firebase:", error);
+      alert("Error trying to save property to Firebase.");
     } finally {
       setIsSaving(false);
     }
@@ -249,8 +246,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       setProperties(properties.filter(p => p.id !== selectedHouse.id));
       setIsDetailModalOpen(false);
     } catch (error) {
-      console.error("Error al eliminar:", error);
-      alert("Hubo un error al intentar eliminar la propiedad.");
+      console.error("Error deleting from Firebase:", error);
+      alert("Error trying to delete property.");
     } finally {
       setIsSaving(false);
     }
@@ -261,8 +258,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setIsDetailModalOpen(true);
   };
 
-  // Filtrar tabla dinámicamente
-  const filteredProperties = activeFilter === 'Todos' 
+  // Dynamic Table Filter
+  const filteredProperties = activeFilter === 'All' 
     ? properties 
     : properties.filter(p => {
         const st = statuses.find(s => s.id === p.statusId);
@@ -274,7 +271,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const kpiIcons = [Briefcase, Clock, ShieldCheck, AlertTriangle];
 
   const today = new Date();
-  const dateFormatted = today.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateFormatted = today.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const dateCapitalized = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1);
 
   return (
@@ -310,6 +307,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
 
+        /* Card Table Mobile First */
         @media (max-width: 768px) {
           .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
           .responsive-table thead { display: none; }
@@ -330,36 +328,36 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         }
       `}</style>
 
-      {/* HEADER TIPO DASHBOARD */}
+      {/* DASHBOARD HEADER */}
       <header className="main-header dashboard-header-container">
         <div className="header-titles">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Abrir menú">
+            <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Open menu">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
             </button>
             <h1 style={{ margin: 0, color: '#111827', fontSize: '1.8rem', fontWeight: 700 }}>Dashboard</h1>
           </div>
-          <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>Vista general de operaciones</p>
+          <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>General operations overview</p>
         </div>
 
         <div className="dashboard-actions-wrapper">
           <div className="search-box-container" style={{ display: 'flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '0 16px', height: '42px', flex: 1, minWidth: '200px' }}>
             <Search size={16} color="#9ca3af" />
-            <input type="text" placeholder="Buscar trabajo..." style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', padding: '10px', fontSize: '0.9rem', width: '100%', color: '#111827' }} />
+            <input type="text" placeholder="Search job..." style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', padding: '10px', fontSize: '0.9rem', width: '100%', color: '#111827' }} />
           </div>
           <button className="bell-btn-mobile" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6b7280', flexShrink: 0 }}>
             <Bell size={18} />
           </button>
           <button className="add-btn-mobile" onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0 }}>
-            <Plus size={16} /> Nuevo Trabajo
+            <Plus size={16} /> New Job
           </button>
         </div>
       </header>
 
-      {/* KPI CARDS SUPERIORES DINÁMICAS (Toma los primeros 4 estados de Firebase) */}
+      {/* KPI CARDS (Dynamic Firebase Statuses) */}
       <div className="dash-grid">
         {isLoading ? (
-          <div style={{ color: '#6b7280' }}>Cargando métricas...</div>
+          <div style={{ color: '#6b7280' }}>Loading metrics...</div>
         ) : (
           statuses.slice(0, 4).map((status, index) => {
             const Icon = kpiIcons[index % kpiIcons.length];
@@ -377,21 +375,21 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         )}
       </div>
 
-      {/* CONTENIDO PRINCIPAL A 2 COLUMNAS */}
+      {/* 2-COLUMN MAIN CONTENT */}
       <div className="main-columns">
 
-        {/* COLUMNA IZQUIERDA: TRABAJOS DEL DÍA */}
+        {/* LEFT COLUMN: DAILY JOBS */}
         <div className="left-col">
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
             <div style={s.tableHeader}>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Trabajos del Día</h2>
+                <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Jobs of the Day</h2>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
-              {/* FILTROS DINÁMICOS DESDE FIREBASE */}
+              {/* DYNAMIC FIREBASE FILTERS */}
               <div className="dashboard-filters">
-                <button onClick={() => setActiveFilter('Todos')} style={s.pillBtn(activeFilter === 'Todos')}>Todos</button>
+                <button onClick={() => setActiveFilter('All')} style={s.pillBtn(activeFilter === 'All')}>All</button>
                 {statuses.map(st => (
                   <button key={st.id} onClick={() => setActiveFilter(st.name)} style={s.pillBtn(activeFilter === st.name)}>
                     {st.name}
@@ -400,30 +398,28 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
-            {/* TABLA RESPONSIVA */}
+            {/* RESPONSIVE TABLE (Actions moved to first column, ID removed) */}
             <div style={{ overflowX: 'auto', padding: '10px 20px 20px 20px' }}>
               <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '100%' }}>
                 <thead>
                   <tr>
-                    <th style={s.th}>ID</th>
-                    <th style={s.th}>Cliente</th>
-                    <th style={s.th}>Hora</th>
-                    <th style={s.th}>Tipo</th>
-                    <th style={s.th}>Equipo</th>
-                    <th style={s.th}>Estado</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>Acción</th>
+                    <th style={s.th}>Actions</th>
+                    <th style={s.th}>Client</th>
+                    <th style={s.th}>Time</th>
+                    <th style={s.th}>Type</th>
+                    <th style={s.th}>Team</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr><td colSpan={7} style={{textAlign: 'center', padding: '40px', color: '#6b7280'}}>Cargando base de datos...</td></tr>
+                    <tr><td colSpan={6} style={{textAlign: 'center', padding: '40px', color: '#6b7280'}}>Loading database...</td></tr>
                   ) : filteredProperties.length === 0 ? (
-                    <tr><td colSpan={7} style={{textAlign: 'center', padding: '40px', color: '#6b7280', fontStyle: 'italic'}}>No hay trabajos para mostrar.</td></tr>
-                  ) : filteredProperties.map((prop, idx) => {
+                    <tr><td colSpan={6} style={{textAlign: 'center', padding: '40px', color: '#6b7280', fontStyle: 'italic'}}>No jobs to display.</td></tr>
+                  ) : filteredProperties.map((prop) => {
                     const statusInfo = s.statusPill(prop.statusId);
-                    const teamName = teams.find(t => t.id === prop.teamId)?.name || 'Sin Asignar';
+                    const teamName = teams.find(t => t.id === prop.teamId)?.name || 'Unassigned';
                     const serviceName = services.find(srv => srv.id === prop.serviceId)?.name || 'Regular';
-                    const mockId = prop.id.length > 5 ? prop.id.substring(0, 6) : `J-104${idx + 2}`;
 
                     return (
                       <tr
@@ -431,8 +427,28 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                         onClick={() => handleOpenDetail(prop)}
                         style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
                       >
-                        <td data-label="ID" style={{ ...s.td, color: '#6b7280', fontSize: '0.85rem', fontFamily: 'monospace' }}>{mockId}</td>
-                        <td data-label="Cliente" style={s.td}>
+                        {/* ACTIONS MOVED TO FIRST COLUMN */}
+                        <td data-label="Actions" style={s.td}>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleOpenForm(prop); }}
+                              style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px', display: 'flex' }}
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setSelectedHouse(prop); 
+                                handleDelete(); 
+                              }}
+                              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px', display: 'flex' }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                        <td data-label="Client" style={s.td}>
                           <div className="mobile-client-cell">
                             <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{prop.client}</div>
                             <div style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -440,22 +456,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                             </div>
                           </div>
                         </td>
-                        <td data-label="Hora" style={{ ...s.td, color: '#6b7280' }}><Clock size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} /> {prop.timeIn || '08:00 AM'}</td>
-                        <td data-label="Tipo" style={{ ...s.td, fontWeight: 500 }}>{serviceName}</td>
-                        <td data-label="Equipo" style={{ ...s.td, color: '#6b7280' }}>{teamName}</td>
-                        <td data-label="Estado" style={s.td}>
+                        <td data-label="Time" style={{ ...s.td, color: '#6b7280' }}><Clock size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} /> {prop.timeIn || '08:00 AM'}</td>
+                        <td data-label="Type" style={{ ...s.td, fontWeight: 500 }}>{serviceName}</td>
+                        <td data-label="Team" style={{ ...s.td, color: '#6b7280' }}>{teamName}</td>
+                        <td data-label="Status" style={{ ...s.td, textAlign: 'right' }}>
                           <span style={{ backgroundColor: statusInfo.bg, color: statusInfo.color, padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusInfo.color }}></span>
                             {statusInfo.text}
                           </span>
-                        </td>
-                        <td data-label="Acción" style={{ ...s.td, textAlign: 'right' }}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onCheckHouse(prop); }}
-                            style={{ background: 'none', border: '1px solid #e5e7eb', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', color: '#111827', fontWeight: 600, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
-                          >
-                            <ClipboardCheck size={14} /> Check
-                          </button>
                         </td>
                       </tr>
                     );
@@ -466,19 +474,18 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           </div>
         </div>
 
-        {/* COLUMNA DERECHA: EQUIPOS ACTIVOS DINÁMICOS */}
+        {/* RIGHT COLUMN: ACTIVE TEAMS */}
         <div className="right-col">
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', padding: '20px' }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Equipos Activos</h3>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Active Teams</h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {isLoading ? (
-                <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Cargando equipos...</div>
+                <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Loading teams...</div>
               ) : teams.length === 0 ? (
-                <div style={{ color: '#6b7280', fontSize: '0.9rem', fontStyle: 'italic' }}>No hay equipos configurados.</div>
+                <div style={{ color: '#6b7280', fontSize: '0.9rem', fontStyle: 'italic' }}>No configured teams.</div>
               ) : (
                 teams.map(team => {
-                  // Contamos trabajos asignados a este equipo hoy
                   const assignedProps = properties.filter(p => p.teamId === team.id);
                   
                   return (
@@ -491,14 +498,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                           <div>
                             <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{team.name}</div>
                             <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                              {assignedProps.length > 0 ? `${assignedProps.length} trabajos hoy` : 'Libre'}
+                              {assignedProps.length > 0 ? `${assignedProps.length} jobs today` : 'Free'}
                             </div>
                           </div>
                         </div>
                       </div>
-                      {/* Barra visual de estado del equipo */}
                       <div style={{ width: '100%', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', marginTop: '12px' }}>
-                        <div style={{ width: assignedProps.length > 0 ? '100%' : '0%', height: '100%', backgroundColor: team.color, borderRadius: '2px' }}></div>
+                        <div style={{ width: assignedProps.length > 0 ? '100%' : '0%', height: '100%', backgroundColor: team.color, borderRadius: '2px', transition: 'width 0.3s ease' }}></div>
                       </div>
                     </div>
                   );
@@ -510,7 +516,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       </div>
 
-      {/* --- MODAL DE FORMULARIO (3 COLUMN GRID) --- */}
+      {/* --- FORM MODAL (3 COLUMN GRID) --- */}
       {isFormModalOpen && (
         <div className="modal-overlay-centered" onClick={handleCloseForm}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -522,13 +528,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <div style={s.body}>
               <div className="grid-3-cols">
 
-                {/* 1. SELECCIÓN DE CLIENTE INTEGRADA A FIREBASE */}
+                {/* 1. FIREBASE CLIENT SELECTION (Autocomplete Address) */}
                 <div>
                   <label style={s.label}>Client <span style={{ color: '#3b82f6' }}>*</span></label>
                   <CustomSelect 
                     options={customersList} 
                     value={formData.client} 
-                    onChange={handleCustomerSelect} // Activa el autocompletado de dirección
+                    onChange={handleCustomerSelect} 
                     placeholder="Select Client..." 
                     icon={User} 
                   />
@@ -623,14 +629,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <footer style={s.footer}>
               <button style={s.btnOutline} onClick={handleCloseForm} disabled={isSaving}>Cancel</button>
               <button style={s.btnPrimary} onClick={handleSave} disabled={isSaving}>
-                {isSaving ? 'Guardando...' : 'Save Property'}
+                {isSaving ? 'Saving...' : 'Save Property'}
               </button>
             </footer>
           </div>
         </div>
       )}
 
-      {/* --- MODAL DE DETALLES (3 COLUMN GRID) --- */}
+      {/* --- DETAIL MODAL (3 COLUMN GRID) --- */}
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -729,10 +735,19 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
             <footer style={s.footerBetween}>
               <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}>
-                <Trash2 size={16} style={{ marginRight: '6px' }} /> {isSaving ? 'Borrando...' : 'Delete Property'}
+                <Trash2 size={16} style={{ marginRight: '6px' }} /> {isSaving ? 'Deleting...' : 'Delete Property'}
               </button>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
+                
+                {/* 5. AÑADIDO BOTÓN DE QUALITY CHECK EN EL FOOTER DE DETALLES */}
+                <button 
+                  onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  <ClipboardCheck size={16} /> Quality Check
+                </button>
+
                 <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>
               </div>
             </footer>
