@@ -19,8 +19,8 @@ const collectionMap: Record<string, string> = {
   service: 'settings_services',
 };
 
-// Custom Responsive Select Component
-const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
+// Custom Responsive Select Component (Fixed to handle IDs correctly)
+const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const selected = options.find((o: any) => o.id === value || o.name === value);
 
@@ -49,7 +49,7 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
             <div 
               key={o.id} 
               style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
-              onMouseDown={(e) => { e.preventDefault(); onChange(o.name || o.id); setIsOpen(false); }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(o[returnKey]); setIsOpen(false); }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
@@ -61,6 +61,15 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
       )}
     </div>
   );
+};
+
+// Helper function for backward compatibility (reading both ID and Name)
+const getRelationName = (list: any[], idOrName: string, fallback = '-') => {
+  return list.find(item => item.id === idOrName || item.name === idOrName)?.name || fallback;
+};
+
+const getRelationColor = (list: any[], idOrName: string) => {
+  return list.find(item => item.id === idOrName || item.name === idOrName)?.color;
 };
 
 interface HousesViewProps {
@@ -165,7 +174,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     
     // Dynamic Status Pill
     statusPill: (statusId: string) => {
-      const status = statuses.find(s => s.id === statusId);
+      const status = statuses.find(s => s.id === statusId || s.name === statusId);
       if (status) {
         return { bg: `${status.color}15`, color: status.color, text: status.name };
       }
@@ -193,7 +202,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   // --- AUTOCOMPLETE LOGIC FOR ADDRESS BASED ON CLIENT ---
   const handleCustomerSelect = (customerName: string) => {
     const selectedCust = customersList.find(c => c.name === customerName);
-    
     if (selectedCust) {
       setFormData({
         ...formData,
@@ -239,7 +247,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   const handleDelete = async () => {
     if(!selectedHouse) return;
-    
     setIsSaving(true);
     try {
       await propertiesService.delete(selectedHouse.id);
@@ -262,7 +269,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const filteredProperties = activeFilter === 'All' 
     ? properties 
     : properties.filter(p => {
-        const st = statuses.find(s => s.id === p.statusId);
+        const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
         return st?.name === activeFilter;
       });
 
@@ -361,7 +368,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         ) : (
           statuses.slice(0, 4).map((status, index) => {
             const Icon = kpiIcons[index % kpiIcons.length];
-            const count = properties.filter(p => p.statusId === status.id).length;
+            const count = properties.filter(p => p.statusId === status.id || p.statusId === status.name).length;
             return (
               <div style={s.kpiCard} key={status.id}>
                 <div style={s.kpiIconBox(status.color)}><Icon size={22} /></div>
@@ -383,7 +390,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
             <div style={s.tableHeader}>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Jobs of the Day</h2>
+                <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Daily Jobs</h2>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
@@ -398,12 +405,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
-            {/* RESPONSIVE TABLE (Actions moved to first column, ID removed) */}
+            {/* RESPONSIVE TABLE (Actions in first column, ID removed) */}
             <div style={{ overflowX: 'auto', padding: '10px 20px 20px 20px' }}>
               <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '100%' }}>
                 <thead>
                   <tr>
-                    <th style={s.th}>Actions</th>
+                    <th style={{...s.th, width: '100px'}}>Actions</th>
                     <th style={s.th}>Client</th>
                     <th style={s.th}>Time</th>
                     <th style={s.th}>Type</th>
@@ -418,8 +425,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     <tr><td colSpan={6} style={{textAlign: 'center', padding: '40px', color: '#6b7280', fontStyle: 'italic'}}>No jobs to display.</td></tr>
                   ) : filteredProperties.map((prop) => {
                     const statusInfo = s.statusPill(prop.statusId);
-                    const teamName = teams.find(t => t.id === prop.teamId)?.name || 'Unassigned';
-                    const serviceName = services.find(srv => srv.id === prop.serviceId)?.name || 'Regular';
+                    const teamName = getRelationName(teams, prop.teamId, 'Unassigned');
+                    const serviceName = getRelationName(services, prop.serviceId, 'Regular');
 
                     return (
                       <tr
@@ -427,7 +434,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                         onClick={() => handleOpenDetail(prop)}
                         style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
                       >
-                        {/* ACTIONS MOVED TO FIRST COLUMN */}
                         <td data-label="Actions" style={s.td}>
                           <div style={{ display: 'flex', gap: '4px' }}>
                             <button 
@@ -437,11 +443,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                               <Edit2 size={16} />
                             </button>
                             <button 
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                setSelectedHouse(prop); 
-                                handleDelete(); 
-                              }}
+                              onClick={(e) => { e.stopPropagation(); setSelectedHouse(prop); handleDelete(); }}
                               style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px', display: 'flex' }}
                             >
                               <Trash2 size={16} />
@@ -486,7 +488,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div style={{ color: '#6b7280', fontSize: '0.9rem', fontStyle: 'italic' }}>No configured teams.</div>
               ) : (
                 teams.map(team => {
-                  const assignedProps = properties.filter(p => p.teamId === team.id);
+                  const assignedProps = properties.filter(p => p.teamId === team.id || p.teamId === team.name);
                   
                   return (
                     <div key={team.id} style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
@@ -528,7 +530,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <div style={s.body}>
               <div className="grid-3-cols">
 
-                {/* 1. FIREBASE CLIENT SELECTION (Autocomplete Address) */}
+                {/* FIREBASE CLIENT SELECTION (Autocomplete Address) */}
                 <div>
                   <label style={s.label}>Client <span style={{ color: '#3b82f6' }}>*</span></label>
                   <CustomSelect 
@@ -537,6 +539,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     onChange={handleCustomerSelect} 
                     placeholder="Select Client..." 
                     icon={User} 
+                    returnKey="name" // Especial para cliente, guardamos el nombre
                   />
                 </div>
                 <div>
@@ -658,8 +661,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    <span style={{ backgroundColor: statuses.find(st => st.id === selectedHouse.statusId)?.color || '#ccc', width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
-                    <span style={s.detailValue}>{statuses.find(st => st.id === selectedHouse.statusId)?.name || 'UNASSIGNED'}</span>
+                    <span style={{ backgroundColor: getRelationColor(statuses, selectedHouse.statusId) || '#ccc', width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
+                    <span style={s.detailValue}>{getRelationName(statuses, selectedHouse.statusId, 'UNASSIGNED')}</span>
                   </div>
                 </div>
                 <div style={s.detailItem}>
@@ -681,7 +684,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Wrench size={14} /> SERVICE</span>
-                  <span style={s.detailValue}>{services.find(srv => srv.id === selectedHouse.serviceId)?.name || '-'}</span>
+                  <span style={s.detailValue}>{getRelationName(services, selectedHouse.serviceId)}</span>
                 </div>
 
                 <div style={s.detailItem}>
@@ -695,8 +698,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Flag size={14} /> PRIORITY</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    {priorities.find(p => p.id === selectedHouse.priorityId)?.color && <span style={{ backgroundColor: priorities.find(p => p.id === selectedHouse.priorityId)?.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-                    <span style={s.detailValue}>{priorities.find(p => p.id === selectedHouse.priorityId)?.name || '-'}</span>
+                    {getRelationColor(priorities, selectedHouse.priorityId) && <span style={{ backgroundColor: getRelationColor(priorities, selectedHouse.priorityId), width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
+                    <span style={s.detailValue}>{getRelationName(priorities, selectedHouse.priorityId)}</span>
                   </div>
                 </div>
 
@@ -711,8 +714,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Users size={14} /> TEAM</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    {teams.find(t => t.id === selectedHouse.teamId)?.color && <span style={{ backgroundColor: teams.find(t => t.id === selectedHouse.teamId)?.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-                    <span style={s.detailValue}>{teams.find(t => t.id === selectedHouse.teamId)?.name || 'Unassigned'}</span>
+                    {getRelationColor(teams, selectedHouse.teamId) && <span style={{ backgroundColor: getRelationColor(teams, selectedHouse.teamId), width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
+                    <span style={s.detailValue}>{getRelationName(teams, selectedHouse.teamId, 'Unassigned')}</span>
                   </div>
                 </div>
 
@@ -739,15 +742,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </button>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
-                
-                {/* 5. AÑADIDO BOTÓN DE QUALITY CHECK EN EL FOOTER DE DETALLES */}
                 <button 
                   onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
                 >
                   <ClipboardCheck size={16} /> Quality Check
                 </button>
-
                 <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>
               </div>
             </footer>
