@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { 
   Tags, Users, UserCheck, Flag, Activity, Percent, 
   MapPin, Wrench, CreditCard, ClipboardList, Package, Building, Plus,
-  Edit2, Trash2, X, ChevronDown // <-- 1. Añadido ChevronDown aquí
+  Edit2, Trash2, X, ChevronDown 
 } from 'lucide-react';
 import type { SettingOption, CategoryExpense, Team, Responsable, Priority, Status, Tax, Place, Service, PaymentMethod, Task, Product, Business } from '../types';
 
@@ -40,6 +40,7 @@ const collectionMap: Record<string, string> = {
   business: 'settings_businesses'
 };
 
+// Componente CustomSelect para mantener la UI Premium
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const selected = options.find((o: any) => o.id === value);
@@ -180,7 +181,7 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
     footer: { display: 'flex', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     formGroup: { display: 'flex', flexDirection: 'column', gap: '6px' } as React.CSSProperties,
     label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' } as React.CSSProperties,
-    input: { padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none' } as React.CSSProperties,
+    input: { backgroundColor: '#ffffff', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s' } as React.CSSProperties,
     btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
     btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
     btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 16px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
@@ -617,11 +618,11 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
             </header>
             <div style={s.body}>
 
-              {/* 2. Ahora sí utilizamos nuestro CustomSelect premium en lugar del select feo */}
+              {/* 2. REEMPLAZO DEL SELECT NATIVO POR EL COMPONENTE PREMIUM (CustomSelect) */}
               {currentSettingView === 'task' && (
                  <div style={s.formGroup}>
                   <label style={s.label}>Place <span style={{color: '#3b82f6'}}>*</span></label>
-                  <CustomSelect
+                  <CustomSelect 
                     options={places}
                     value={formData.placeId}
                     onChange={(val: string) => setFormData({ ...formData, placeId: val })}
