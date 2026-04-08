@@ -1,348 +1,594 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, 
-  Home, Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, MapPin
+  ChevronLeft, ChevronRight, Plus, X, Edit2, Trash2, 
+  Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck, MapPin
 } from 'lucide-react';
-import type { Property, Status, Team, Priority, Service } from '../types';
+import type { Property, Status, Team, Priority, Service, Customer } from '../types';
 
-const mockStatuses: Status[] = [
-  { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#4b5563' },
-  { id: '2', order: 2, name: 'NEEDS TO BE SCHEDULE', business: 'Regular', color: '#3b82f6' },
-  { id: '3', order: 3, name: 'SCHEDULE PENDING', business: 'Regular', color: '#f97316' },
-  { id: '4', order: 4, name: 'IN PROGRESS', business: 'Regular , Cavalry', color: '#a855f7' }
-];
+// --- FIREBASE SERVICES ---
+import { propertiesService } from '../services/propertiesService';
+import { settingsService } from '../services/settingsService';
+import { customersService } from '../services/customersService';
 
-const mockTeams: Team[] = [
-  { id: '1', name: 'Team test', business: '', color: '#f97316' },
-  { id: '2', name: 'Team Jesus', business: '', color: '#e5e7eb' },
-];
+// Settings Collections Map
+const collectionMap: Record<string, string> = {
+  team: 'settings_teams',
+  priority: 'settings_priorities',
+  status: 'settings_statuses',
+  service: 'settings_services',
+};
 
-const mockPriorities: Priority[] = [
-  { id: '1', name: 'HIGH', business: 'a', color: '#ef4444' },
-  { id: '2', name: 'MEDIUM', business: '', color: '#eab308' },
-  { id: '3', name: 'LOW', business: '', color: '#22c55e' }
-];
+// --- CUSTOM COMPONENTS & HELPERS ---
+const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selected = options.find((o: any) => o.id === value || o.name === value);
 
-const mockServices: Service[] = [
-  { id: 's1', name: 'Full', estimatedTime: '', business: '' },
-  { id: 's2', name: 'Light', estimatedTime: '120', business: '' }
-];
+  return (
+    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', position: 'relative' }}
+      >
+        <Icon size={16} style={{ position: 'absolute', left: '14px', color: '#6b7280' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {selected?.color && <span style={{ backgroundColor: selected.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
+          <span style={{ color: selected ? '#111827' : '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>
+            {selected ? selected.name : placeholder}
+          </span>
+        </div>
+        <ChevronDown size={16} color="#9ca3af" style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />
+      </div>
 
+      {isOpen && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, width: '100%', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 1000, maxHeight: '220px', overflowY: 'auto', marginTop: '4px' }}>
+          <div style={{ padding: '12px 14px', cursor: 'pointer', color: '#9ca3af', borderBottom: '1px solid #f3f4f6' }} onMouseDown={(e) => { e.preventDefault(); onChange(''); setIsOpen(false); }}>
+            None / Unassigned
+          </div>
+          {options.map((o: any) => (
+            <div 
+              key={o.id} 
+              style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(o[returnKey] || o.id); setIsOpen(false); }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              {o.color && <span style={{ backgroundColor: o.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', flexShrink: 0 }}></span>}
+              <span style={{ color: '#111827', fontWeight: 500 }}>{o.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const getRelationName = (list: any[], idOrName: string, fallback = '-') => {
+  return list.find(item => item.id === idOrName || item.name === idOrName)?.name || fallback;
+};
+
+const getRelationColor = (list: any[], idOrName: string) => {
+  return list.find(item => item.id === idOrName || item.name === idOrName)?.color;
+};
+
+// 1. CORRECCIÓN: Agregamos onCheckHouse a las propiedades
 interface CalendarViewProps {
   onOpenMenu: () => void;
-  properties: Property[];
+  onCheckHouse?: (house: Property) => void; // Opcional para evitar romper el App.tsx
 }
 
-export default function CalendarView({ onOpenMenu, properties }: CalendarViewProps) {
-  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
+// 2. CORRECCIÓN: Desestructuramos onCheckHouse
+export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewProps) {
+  
+  // --- FIREBASE STATES ---
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [priorities, setPriorities] = useState<Priority[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [customersList, setCustomersList] = useState<Customer[]>([]);
+
+  // --- UI STATES ---
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date());
+
+  // --- MODAL STATES ---
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
   
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [formData, setFormData] = useState<Property>({
+    id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: ''
+  });
 
-  const handleOpenDetail = (house: Property) => {
-    setSelectedHouse(house);
-    setIsDetailModalOpen(true);
+  // --- FETCH DATA ---
+  useEffect(() => {
+    const fetchAllData = async () => {
+      setIsLoading(true);
+      try {
+        const [ propsData, statusData, teamData, prioData, servData, custData ] = await Promise.all([
+          propertiesService.getAll(),
+          settingsService.getAll(collectionMap.status),
+          settingsService.getAll(collectionMap.team),
+          settingsService.getAll(collectionMap.priority),
+          settingsService.getAll(collectionMap.service),
+          customersService.getAll() 
+        ]);
+
+        if (propsData) setProperties(propsData);
+        if (statusData) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
+        if (teamData) setTeams(teamData as Team[]);
+        if (prioData) setPriorities(prioData as Priority[]);
+        if (servData) setServices(servData as Service[]);
+        if (custData) setCustomersList(custData);
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchAllData();
+  }, []);
+
+  // --- CALENDAR LOGIC ---
+  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const days = [];
+    
+    for (let i = 0; i < firstDay.getDay(); i++) {
+      days.push(null);
+    }
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      days.push(new Date(year, month, i));
+    }
+    return days;
   };
 
+  const calendarDays = getDaysInMonth(currentDate);
+  const monthName = currentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
-  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
-
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth();
-  const daysInCurrentMonth = getDaysInMonth(currentYear, currentMonth);
-  const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
-
-  const blanks = Array.from({ length: firstDay }, (_, i) => `blank-${i}`);
-  const daysArray = Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1);
-
-  const handlePrev = () => {
-    if (viewMode === 'month') {
-      setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
-    } else if (viewMode === 'week') {
-      setCurrentDate(new Date(currentYear, currentMonth, currentDate.getDate() - 7));
+  // --- MODAL HANDLERS ---
+  const handleOpenForm = (house?: Property, defaultDate?: string) => {
+    if (house) {
+      setFormData(house);
     } else {
-      setCurrentDate(new Date(currentYear, currentMonth, currentDate.getDate() - 1));
+      const defaultStatus = statuses.length > 0 ? statuses[0].id : '';
+      setFormData({ 
+        id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], 
+        scheduleDate: defaultDate || '', client: '', note: '', address: '', employeeNote: '', serviceId: '', 
+        rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '' 
+      });
+    }
+    setSelectedHouse(house || null);
+    setIsDetailModalOpen(false);
+    setIsFormModalOpen(true);
+  };
+
+  const handleCloseForm = () => {
+    setIsFormModalOpen(false);
+    setSelectedHouse(null);
+  };
+
+  const handleCustomerSelect = (customerName: string) => {
+    const selectedCust = customersList.find(c => c.name === customerName);
+    if (selectedCust) {
+      setFormData({ ...formData, client: customerName, address: selectedCust.address || formData.address });
+    } else {
+      setFormData({ ...formData, client: customerName });
     }
   };
 
-  const handleNext = () => {
-    if (viewMode === 'month') {
-      setCurrentDate(new Date(currentYear, currentMonth + 1, 1));
-    } else if (viewMode === 'week') {
-      setCurrentDate(new Date(currentYear, currentMonth, currentDate.getDate() + 7));
-    } else {
-      setCurrentDate(new Date(currentYear, currentMonth, currentDate.getDate() + 1));
+  const handleSave = async () => {
+    if (!formData.client) return alert("Client is required.");
+    if (!formData.address) return alert("Address is required.");
+    
+    setIsSaving(true);
+    try {
+      if (selectedHouse && selectedHouse.id) {
+        const { id, ...dataToUpdate } = formData; 
+        await propertiesService.update(selectedHouse.id, dataToUpdate);
+        setProperties(properties.map(p => p.id === selectedHouse.id ? { ...formData } : p));
+      } else {
+        const { id, ...dataToAdd } = formData; 
+        const completeData = {
+          ...dataToAdd,
+          description: `${formData.client} - ${formData.rooms} rooms`,
+          city: 'TBD', size: 'TBD'
+        };
+        const newId = await propertiesService.create(completeData as unknown as Omit<Property, 'id'>);
+        setProperties([...properties, { ...formData, id: newId, description: completeData.description, city: completeData.city, size: completeData.size }]);
+      }
+      handleCloseForm();
+    } catch (error) {
+      console.error("Error saving to Firebase:", error);
+      alert("Error trying to save property.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleToday = () => setCurrentDate(new Date());
-
-  const getFormattedDate = (year: number, month: number, day: number) => {
-    const mm = String(month + 1).padStart(2, '0');
-    const dd = String(day).padStart(2, '0');
-    return `${year}-${mm}-${dd}`;
+  const handleDelete = async () => {
+    if(!selectedHouse) return;
+    setIsSaving(true);
+    try {
+      await propertiesService.delete(selectedHouse.id);
+      setProperties(properties.filter(p => p.id !== selectedHouse.id));
+      setIsDetailModalOpen(false);
+    } catch (error) {
+      console.error("Error deleting:", error);
+      alert("Error trying to delete property.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const getEventsForDay = (day: number) => {
-    const targetDateStr = getFormattedDate(currentYear, currentMonth, day);
-    // Usamos el array properties que nos pasa App.tsx
-    return properties.filter(p => p.scheduleDate === targetDateStr || (!p.scheduleDate && p.receiveDate === targetDateStr));
-  };
+  const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
+  const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
 
+  // --- STYLES OBJECT ---
   const s = {
-    overlay: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', overflowY: 'auto', boxSizing: 'border-box' } as React.CSSProperties,
-    modalWide: { backgroundColor: '#ffffff', width: '100%', maxWidth: '950px', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' } as React.CSSProperties,
+    overlayCentered: { position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px', boxSizing: 'border-box' } as React.CSSProperties,
+    modal70: { backgroundColor: '#ffffff', width: '100%', maxWidth: '1000px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' } as React.CSSProperties,
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
-    title: { fontSize: '1.15rem', fontWeight: 600, color: '#111827', margin: 0 },
+    title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
     body: { padding: '30px', overflowY: 'auto' } as React.CSSProperties,
-    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex' },
-    flexRow: { display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' } as React.CSSProperties,
+    footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
+    footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
+    label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' } as React.CSSProperties,
+    inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', width: '100%' } as React.CSSProperties,
+    icon: { position: 'absolute', left: '14px', color: '#6b7280', pointerEvents: 'none' } as React.CSSProperties,
+    input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s' } as React.CSSProperties,
+    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s', opacity: isSaving ? 0.7 : 1 } as React.CSSProperties,
+    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
+    btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
+    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' },
     detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
-    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', flex: '1 1 200px' } as React.CSSProperties,
+    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } as React.CSSProperties,
     detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
     detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
-    noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', flex: '1 1 100%' } as React.CSSProperties,
-    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', flex: '1 1 100%' } as React.CSSProperties
-  };
-
-  const calStyles = {
-    container: { backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
-    toolbar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: '16px' } as React.CSSProperties,
-    monthLabel: { fontSize: '1.25rem', fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: '12px' },
-    toggleGroup: { display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '8px' },
-    toggleBtn: (isActive: boolean) => ({
-      padding: '6px 16px', fontSize: '0.9rem', fontWeight: 500, border: 'none', cursor: 'pointer', borderRadius: '6px',
-      backgroundColor: isActive ? '#ffffff' : 'transparent', color: isActive ? '#3b82f6' : '#64748b', boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s'
-    }),
-    gridMonth: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))', minWidth: '800px' },
-    gridWeek: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))', minWidth: '800px', minHeight: '600px' },
-    gridDay: { display: 'flex', flexDirection: 'column', padding: '20px', minHeight: '600px' } as React.CSSProperties,
-    dayHeader: { padding: '12px', textAlign: 'center' as const, fontWeight: 600, color: '#6b7280', fontSize: '0.85rem', borderBottom: '1px solid #e5e7eb', borderRight: '1px solid #e5e7eb', textTransform: 'uppercase' as const },
-    dayCell: { minHeight: '120px', padding: '8px', borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '4px', backgroundColor: '#fff' } as React.CSSProperties,
-    dateNumber: { fontSize: '0.9rem', fontWeight: 500, color: '#111827', marginBottom: '4px', textAlign: 'right' as const },
-    eventPill: (statusId: string) => {
-      const statusColor = mockStatuses.find(s => s.id === statusId)?.color || '#3b82f6';
-      return {
-        backgroundColor: `${statusColor}15`, borderLeft: `3px solid ${statusColor}`, color: '#111827', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', flexDirection: 'column' as const, gap: '2px', transition: 'background-color 0.2s'
-      };
-    }
+    noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
+    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', width: '100%' } as React.CSSProperties,
   };
 
   return (
-    <div className="fade-in" style={{ padding: '20px' }}>
-      <header className="main-header" style={{ marginBottom: '24px' }}>
-        <div className="header-titles">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Abrir menú" style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-            </button>
-            <h1 style={{ margin: 0, color: '#111827', fontSize: '2rem' }}>Calendar</h1>
+    <div className="fade-in" style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      
+      {/* INJECTED CALENDAR CSS */}
+      <style>{`
+        .calendar-wrapper { display: flex; flex-direction: column; flex: 1; background: white; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
+        .calendar-header-grid { display: grid; grid-template-columns: repeat(7, 1fr); background-color: #f8fafc; border-bottom: 1px solid #e5e7eb; }
+        .calendar-header-cell { padding: 12px; text-align: center; font-weight: 600; font-size: 0.85rem; color: #64748b; text-transform: uppercase; }
+        .calendar-body-grid { display: grid; grid-template-columns: repeat(7, 1fr); flex: 1; background-color: #e5e7eb; gap: 1px; }
+        .calendar-day-cell { background-color: #ffffff; min-height: 120px; padding: 8px; display: flex; flex-direction: column; gap: 4px; transition: background-color 0.2s; }
+        .calendar-day-cell:hover { background-color: #f8fafc; }
+        .calendar-day-cell.empty { background-color: #f9fafb; cursor: default; }
+        .calendar-date-number { font-weight: 600; font-size: 0.95rem; color: #1e293b; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+        .calendar-add-btn { background: none; border: none; color: #94a3b8; cursor: pointer; border-radius: 4px; padding: 2px; }
+        .calendar-add-btn:hover { background-color: #e2e8f0; color: #3b82f6; }
+        
+        .calendar-event { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid rgba(0,0,0,0.05); }
+        .calendar-event:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); filter: brightness(0.95); }
+
+        .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
+        .col-span-full { grid-column: 1 / -1; }
+        @media (max-width: 768px) {
+          .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
+          .calendar-body-grid, .calendar-header-grid { display: flex; flex-direction: column; gap: 0; }
+          .calendar-header-grid { display: none; }
+          .calendar-day-cell { min-height: auto; border-bottom: 1px solid #e5e7eb; }
+          .calendar-day-cell.empty { display: none; }
+        }
+      `}</style>
+
+      {/* HEADER */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button onClick={onOpenMenu} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }} className="mobile-menu-btn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </button>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#111827', fontWeight: 700 }}>Calendar</h1>
+            <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>Schedule & Planning</p>
           </div>
-          <p style={{ marginTop: '4px', color: '#6b7280' }}>Schedule and dispatch overview</p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'white', padding: '6px 12px', borderRadius: '24px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+          <button onClick={prevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronLeft size={20}/></button>
+          <span style={{ fontWeight: 700, color: '#1e293b', minWidth: '130px', textAlign: 'center' }}>{monthName}</span>
+          <button onClick={nextMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronRight size={20}/></button>
         </div>
       </header>
 
-      <div style={calStyles.container}>
-        <div style={calStyles.toolbar}>
-          <div style={calStyles.monthLabel}>
-            <button onClick={handlePrev} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '4px', cursor: 'pointer', display: 'flex' }}><ChevronLeft size={20}/></button>
-            <CalendarIcon size={22} color="#3b82f6" />
-            <span style={{ minWidth: '130px', textAlign: 'center' }}>
-              {viewMode === 'month' ? `${monthNames[currentMonth]} ${currentYear}` : currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric'})}
-            </span>
-            <button onClick={handleNext} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '4px', cursor: 'pointer', display: 'flex' }}><ChevronRight size={20}/></button>
-            <button onClick={handleToday} style={{ marginLeft: '12px', fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6', background: 'none', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer' }}>Today</button>
+      {/* CALENDAR GRID */}
+      {isLoading ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>Loading calendar data...</div>
+      ) : (
+        <div className="calendar-wrapper">
+          <div className="calendar-header-grid">
+            {weekDays.map(day => <div key={day} className="calendar-header-cell">{day}</div>)}
           </div>
+          <div className="calendar-body-grid">
+            {calendarDays.map((date, index) => {
+              if (!date) return <div key={`empty-${index}`} className="calendar-day-cell empty"></div>;
+              
+              // Ajuste de zona horaria para que no haya desfase en los días al renderizar
+              const offset = date.getTimezoneOffset()
+              const localDate = new Date(date.getTime() - (offset*60*1000))
+              const dateString = localDate.toISOString().split('T')[0]
+              
+              const dailyJobs = properties.filter(p => p.scheduleDate === dateString);
 
-          <div style={calStyles.toggleGroup}>
-            <button style={calStyles.toggleBtn(viewMode === 'day')} onClick={() => setViewMode('day')}>Day</button>
-            <button style={calStyles.toggleBtn(viewMode === 'week')} onClick={() => setViewMode('week')}>Week</button>
-            <button style={calStyles.toggleBtn(viewMode === 'month')} onClick={() => setViewMode('month')}>Month</button>
+              return (
+                <div key={dateString} className="calendar-day-cell">
+                  <div className="calendar-date-number">
+                    <span>{date.getDate()}</span>
+                    <button className="calendar-add-btn" onClick={() => handleOpenForm(undefined, dateString)}>
+                      <Plus size={14}/>
+                    </button>
+                  </div>
+                  
+                  {dailyJobs.map(job => {
+                    const statusColor = getRelationColor(statuses, job.statusId) || '#cbd5e1';
+                    return (
+                      <div 
+                        key={job.id} 
+                        className="calendar-event"
+                        style={{ backgroundColor: `${statusColor}15`, color: '#1e293b', borderLeft: `3px solid ${statusColor}` }}
+                        onClick={() => { setSelectedHouse(job); setIsDetailModalOpen(true); }}
+                      >
+                        <span style={{ fontWeight: 700 }}>{job.timeIn || '--:--'}</span>
+                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden' }}>{job.client}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              );
+            })}
           </div>
         </div>
+      )}
 
-        <div style={{ overflowX: 'auto' }}>
-          
-          {viewMode === 'month' && (
-            <div style={calStyles.gridMonth}>
-              {weekDays.map(day => <div key={day} style={calStyles.dayHeader}>{day}</div>)}
-              
-              {blanks.map(blank => (
-                <div key={blank} style={{ ...calStyles.dayCell, backgroundColor: '#f8fafc' }}></div>
-              ))}
+      {/* --- FORM MODAL --- */}
+      {isFormModalOpen && (
+        <div style={s.overlayCentered} onClick={handleCloseForm}>
+          <div style={s.modal70} onClick={e => e.stopPropagation()}>
+            <header style={s.header}>
+              <h3 style={s.title}>{selectedHouse ? 'Edit Property Details' : 'Register New Property'}</h3>
+              <button style={s.closeBtn} onClick={handleCloseForm}><X size={24} /></button>
+            </header>
 
-              {daysArray.map(day => {
-                const dayEvents = getEventsForDay(day);
-                const isToday = new Date().toDateString() === new Date(currentYear, currentMonth, day).toDateString();
+            <div style={s.body}>
+              <div className="grid-3-cols">
 
-                return (
-                  <div key={`month-day-${day}`} style={{...calStyles.dayCell, backgroundColor: isToday ? '#eff6ff' : '#ffffff'}}>
-                    <span style={{...calStyles.dateNumber, color: isToday ? '#3b82f6' : '#111827', fontWeight: isToday ? 700 : 500 }}>{day}</span>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, overflowY: 'auto' }}>
-                      {dayEvents.map(event => (
-                        <div key={event.id} style={calStyles.eventPill(event.statusId)} onClick={() => handleOpenDetail(event)}>
-                          <span style={{ fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.timeIn && `${event.timeIn} - `}{event.client}</span>
-                          <span style={{ color: '#6b7280', fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.address}</span>
-                        </div>
-                      ))}
-                    </div>
+                <div>
+                  <label style={s.label}>Client <span style={{ color: '#3b82f6' }}>*</span></label>
+                  <CustomSelect 
+                    options={customersList} 
+                    value={formData.client} 
+                    onChange={handleCustomerSelect} 
+                    placeholder="Select Client..." 
+                    icon={User} 
+                    returnKey="name" 
+                  />
+                </div>
+                <div>
+                  <label style={s.label}>Address <span style={{ color: '#3b82f6' }}>*</span></label>
+                  <div style={s.inputWrapper}>
+                    <MapPin style={s.icon} size={16} />
+                    <input type="text" style={s.input} placeholder="Enter full address..." value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+                <div>
+                  <label style={s.label}>Status <span style={{ color: '#3b82f6' }}>*</span></label>
+                  <CustomSelect options={statuses} value={formData.statusId} onChange={(val: string) => setFormData({ ...formData, statusId: val })} placeholder="Select Status..." icon={Activity} />
+                </div>
 
-          {viewMode === 'week' && (
-            <div style={calStyles.gridWeek}>
-              {weekDays.map((day, idx) => {
-                const firstDayOfWeek = new Date(currentDate);
-                firstDayOfWeek.setDate(currentDate.getDate() - currentDate.getDay() + idx);
-                
-                const currentWeekDay = firstDayOfWeek.getDate();
-                const currentWeekMonth = firstDayOfWeek.getMonth();
-                const currentWeekYear = firstDayOfWeek.getFullYear();
+                <div>
+                  <label style={s.label}>Invoice Status</label>
+                  <CustomSelect options={invoiceOptions} value={formData.invoiceStatus} onChange={(val: any) => setFormData({ ...formData, invoiceStatus: val })} placeholder="Select Invoice Status..." icon={FileText} />
+                </div>
+                <div>
+                  <label style={s.label}>Services</label>
+                  <CustomSelect options={services} value={formData.serviceId} onChange={(val: string) => setFormData({ ...formData, serviceId: val })} placeholder="Select Service..." icon={Wrench} />
+                </div>
+                <div>
+                  <label style={s.label}>Priority</label>
+                  <CustomSelect options={priorities} value={formData.priorityId} onChange={(val: string) => setFormData({ ...formData, priorityId: val })} placeholder="Select Priority..." icon={Flag} />
+                </div>
 
-                const targetDateStr = getFormattedDate(currentWeekYear, currentWeekMonth, currentWeekDay);
-                const dayEvents = properties.filter(p => p.scheduleDate === targetDateStr || (!p.scheduleDate && p.receiveDate === targetDateStr));
-                
-                const isToday = new Date().toDateString() === firstDayOfWeek.toDateString();
-
-                return (
-                  <div key={`week-day-${day}`} style={{ borderRight: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', backgroundColor: isToday ? '#eff6ff' : '#ffffff' }}>
-                    <div style={{...calStyles.dayHeader, backgroundColor: isToday ? '#bfdbfe' : '#f8fafc', color: isToday ? '#1e3a8a' : '#6b7280'}}>
-                      {day} <span style={{fontSize: '1.1rem', color: isToday ? '#1e3a8a' : '#111827', marginLeft: '6px'}}>{currentWeekDay}</span>
-                    </div>
-                    <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-                       {dayEvents.map(event => (
-                        <div key={`week-evt-${event.id}`} style={{...calStyles.eventPill(event.statusId), padding: '8px'}} onClick={() => handleOpenDetail(event)}>
-                          <span style={{ fontWeight: 600 }}>{event.client}</span>
-                          {event.timeIn && <span style={{ color: '#3b82f6', fontWeight: 500 }}><Clock size={10} style={{display: 'inline', marginRight: '4px'}}/>{event.timeIn}</span>}
-                          <span style={{ color: '#6b7280', fontSize: '0.7rem', lineHeight: '1.2' }}>{event.address}</span>
-                        </div>
-                      ))}
-                    </div>
+                <div>
+                  <label style={s.label}>Receive Date</label>
+                  <div style={s.inputWrapper}>
+                    <CalendarDays style={s.icon} size={16} />
+                    <input type="date" style={s.input} value={formData.receiveDate} onChange={e => setFormData({ ...formData, receiveDate: e.target.value })} />
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+                <div>
+                  <label style={s.label}>Schedule Date</label>
+                  <div style={s.inputWrapper}>
+                    <CalendarDays style={s.icon} size={16} />
+                    <input type="date" style={s.input} value={formData.scheduleDate} onChange={e => setFormData({ ...formData, scheduleDate: e.target.value })} />
+                  </div>
+                </div>
+                <div>
+                  <label style={s.label}>Team</label>
+                  <CustomSelect options={teams} value={formData.teamId} onChange={(val: string) => setFormData({ ...formData, teamId: val })} placeholder="Assign Team..." icon={Users} />
+                </div>
 
-          {viewMode === 'day' && (
-            <div style={calStyles.gridDay}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {getEventsForDay(currentDate.getDate()).length === 0 ? (
-                   <p style={{ color: '#6b7280', fontStyle: 'italic', textAlign: 'center', marginTop: '40px' }}>No events scheduled for this day.</p>
-                ) : (
-                  getEventsForDay(currentDate.getDate()).map(event => {
-                    const statusColor = mockStatuses.find(s => s.id === event.statusId)?.color || '#3b82f6';
-                    return (
-                      <div key={`day-evt-${event.id}`} onClick={() => handleOpenDetail(event)} style={{ borderLeft: `4px solid ${statusColor}`, backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', gap: '20px', alignItems: 'center', transition: 'transform 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                        <div style={{ minWidth: '80px', fontWeight: 600, color: '#3b82f6', fontSize: '1.1rem' }}>
-                          {event.timeIn || 'Any Time'}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{event.client}</div>
-                          <div style={{ display: 'flex', gap: '12px', color: '#6b7280', fontSize: '0.85rem' }}>
-                            <span style={{display: 'flex', alignItems: 'center', gap: '4px'}}><MapPin size={12}/> {event.address}</span>
-                            <span style={{display: 'flex', alignItems: 'center', gap: '4px'}}><Wrench size={12}/> {mockServices.find(srv => srv.id === event.serviceId)?.name || 'Service'}</span>
-                          </div>
-                        </div>
-                        <div>
-                          <span style={{ backgroundColor: `${statusColor}20`, color: statusColor, padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>
-                            {mockStatuses.find(s => s.id === event.statusId)?.name}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+                <div>
+                  <label style={s.label}>Time In</label>
+                  <div style={s.inputWrapper}>
+                    <Clock style={s.icon} size={16} />
+                    <input type="time" style={s.input} value={formData.timeIn} onChange={e => setFormData({ ...formData, timeIn: e.target.value })} />
+                  </div>
+                </div>
+                <div>
+                  <label style={s.label}>Time Out</label>
+                  <div style={s.inputWrapper}>
+                    <Clock style={s.icon} size={16} />
+                    <input type="time" style={s.input} value={formData.timeOut} onChange={e => setFormData({ ...formData, timeOut: e.target.value })} />
+                  </div>
+                </div>
+                <div>
+                  <label style={s.label}>Rooms</label>
+                  <CustomSelect options={roomOptions} value={formData.rooms} onChange={(val: string) => setFormData({ ...formData, rooms: val })} placeholder="Rooms..." icon={Hash} />
+                </div>
+                
+                <div>
+                  <label style={s.label}>Bathrooms</label>
+                  <CustomSelect options={roomOptions} value={formData.bathrooms} onChange={(val: string) => setFormData({ ...formData, bathrooms: val })} placeholder="Bathrooms..." icon={Hash} />
+                </div>
+
+                <div className="col-span-full">
+                  <label style={s.label}>Note</label>
+                  <div style={{ ...s.inputWrapper, alignItems: 'flex-start' }}>
+                    <StickyNote style={{ ...s.icon, top: '14px' }} size={16} />
+                    <textarea style={{ ...s.input, minHeight: '80px', resize: 'vertical' }} placeholder="General instructions or notes..." value={formData.note} onChange={e => setFormData({ ...formData, note: e.target.value })}></textarea>
+                  </div>
+                </div>
+
+                <div className="col-span-full">
+                  <label style={s.label}>Employee's Note</label>
+                  <div style={{ ...s.inputWrapper, alignItems: 'flex-start' }}>
+                    <PenTool style={{ ...s.icon, top: '14px' }} size={16} />
+                    <textarea style={{ ...s.input, minHeight: '80px', resize: 'vertical' }} placeholder="Employee performance notes..." value={formData.employeeNote} onChange={e => setFormData({ ...formData, employeeNote: e.target.value })}></textarea>
+                  </div>
+                </div>
+
               </div>
             </div>
-          )}
-
+            
+            <footer style={s.footer}>
+              <button style={s.btnOutline} onClick={handleCloseForm} disabled={isSaving}>Cancel</button>
+              <button style={s.btnPrimary} onClick={handleSave} disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Save Property'}
+              </button>
+            </footer>
+          </div>
         </div>
-      </div>
+      )}
 
+      {/* --- DETAIL MODAL --- */}
       {isDetailModalOpen && selectedHouse && (
-        <div style={s.overlay} onClick={() => setIsDetailModalOpen(false)}>
-          <div style={s.modalWide} onClick={e => e.stopPropagation()}>
+        <div style={s.overlayCentered} onClick={() => setIsDetailModalOpen(false)}>
+          <div style={s.modal70} onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
-              <button style={s.closeBtn} onClick={() => setIsDetailModalOpen(false)}><X size={20} /></button>
+              <button style={s.closeBtn} onClick={() => setIsDetailModalOpen(false)}><X size={24} /></button>
             </header>
-            
+
             <div style={s.body}>
               <div style={s.detailBanner}>
-                <div style={{...s.detailItem, flex: '1 1 100%'}}>
-                  <span style={{...s.detailLabel, color: '#1e40af'}}><Home size={14} /> PROPERTY ADDRESS</span>
+                <div style={s.detailItem}>
+                  <span style={{ ...s.detailLabel, color: '#1e40af' }}><Home size={14} /> PROPERTY ADDRESS</span>
                   <span style={{ fontSize: '1.25rem', color: '#1e3a8a', fontWeight: 600, marginTop: '4px' }}>{selectedHouse.address}</span>
                 </div>
               </div>
 
-              <div style={s.flexRow}>
+              <div className="grid-3-cols">
+
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    <span style={{ backgroundColor: mockStatuses.find(st => st.id === selectedHouse.statusId)?.color || '#ccc', width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
-                    <span style={s.detailValue}>{mockStatuses.find(st => st.id === selectedHouse.statusId)?.name || 'UNASSIGNED'}</span>
+                    <span style={{ backgroundColor: getRelationColor(statuses, selectedHouse.statusId) || '#ccc', width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
+                    <span style={s.detailValue}>{getRelationName(statuses, selectedHouse.statusId, 'UNASSIGNED')}</span>
                   </div>
                 </div>
-                <div style={s.detailItem}><span style={s.detailLabel}><FileText size={14} /> INVOICE STATUS</span><span style={s.detailValue}>{selectedHouse.invoiceStatus || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><User size={14} /> CLIENT</span><span style={s.detailValue}>{selectedHouse.client || '-'}</span></div>
-              </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><FileText size={14} /> INVOICE STATUS</span>
+                  <span style={s.detailValue}>{selectedHouse.invoiceStatus || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><User size={14} /> CLIENT</span>
+                  <span style={s.detailValue}>{selectedHouse.client || '-'}</span>
+                </div>
 
-              <div style={s.flexRow}>
-                <div style={s.detailItem}><span style={s.detailLabel}><CalendarDays size={14} /> RECEIVE DATE</span><span style={s.detailValue}>{selectedHouse.receiveDate || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><CalendarDays size={14} /> SCHEDULE DATE</span><span style={s.detailValue}>{selectedHouse.scheduleDate || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><Wrench size={14} /> SERVICE</span><span style={s.detailValue}>{mockServices.find(srv => srv.id === selectedHouse.serviceId)?.name || '-'}</span></div>
-              </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><CalendarDays size={14} /> RECEIVE DATE</span>
+                  <span style={s.detailValue}>{selectedHouse.receiveDate || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><CalendarDays size={14} /> SCHEDULE DATE</span>
+                  <span style={s.detailValue}>{selectedHouse.scheduleDate || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Wrench size={14} /> SERVICE</span>
+                  <span style={s.detailValue}>{getRelationName(services, selectedHouse.serviceId)}</span>
+                </div>
 
-              <div style={s.flexRow}>
-                <div style={s.detailItem}><span style={s.detailLabel}><Clock size={14} /> TIME IN</span><span style={s.detailValue}>{selectedHouse.timeIn || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><Clock size={14} /> TIME OUT</span><span style={s.detailValue}>{selectedHouse.timeOut || '-'}</span></div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Clock size={14} /> TIME IN</span>
+                  <span style={s.detailValue}>{selectedHouse.timeIn || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Clock size={14} /> TIME OUT</span>
+                  <span style={s.detailValue}>{selectedHouse.timeOut || '-'}</span>
+                </div>
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Flag size={14} /> PRIORITY</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    {mockPriorities.find(p => p.id === selectedHouse.priorityId)?.color && <span style={{ backgroundColor: mockPriorities.find(p => p.id === selectedHouse.priorityId)?.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-                    <span style={s.detailValue}>{mockPriorities.find(p => p.id === selectedHouse.priorityId)?.name || '-'}</span>
+                    {getRelationColor(priorities, selectedHouse.priorityId) && <span style={{ backgroundColor: getRelationColor(priorities, selectedHouse.priorityId), width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
+                    <span style={s.detailValue}>{getRelationName(priorities, selectedHouse.priorityId)}</span>
                   </div>
                 </div>
-              </div>
 
-              <div style={s.flexRow}>
-                <div style={s.detailItem}><span style={s.detailLabel}><Hash size={14} /> ROOMS</span><span style={s.detailValue}>{selectedHouse.rooms || '-'}</span></div>
-                <div style={s.detailItem}><span style={s.detailLabel}><Hash size={14} /> BATHROOMS</span><span style={s.detailValue}>{selectedHouse.bathrooms || '-'}</span></div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Hash size={14} /> ROOMS</span>
+                  <span style={s.detailValue}>{selectedHouse.rooms || '-'}</span>
+                </div>
+                <div style={s.detailItem}>
+                  <span style={s.detailLabel}><Hash size={14} /> BATHROOMS</span>
+                  <span style={s.detailValue}>{selectedHouse.bathrooms || '-'}</span>
+                </div>
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Users size={14} /> TEAM</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    {mockTeams.find(t => t.id === selectedHouse.teamId)?.color && <span style={{ backgroundColor: mockTeams.find(t => t.id === selectedHouse.teamId)?.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-                    <span style={s.detailValue}>{mockTeams.find(t => t.id === selectedHouse.teamId)?.name || 'Unassigned'}</span>
+                    {getRelationColor(teams, selectedHouse.teamId) && <span style={{ backgroundColor: getRelationColor(teams, selectedHouse.teamId), width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
+                    <span style={s.detailValue}>{getRelationName(teams, selectedHouse.teamId, 'Unassigned')}</span>
                   </div>
                 </div>
-              </div>
-                
-              <div style={s.flexRow}>
-                <div style={s.noteBoxGray}>
-                  <span style={{...s.detailLabel, marginBottom: '8px'}}><StickyNote size={14} /> GENERAL NOTE</span>
-                  <span style={{...s.detailValue, fontSize: '0.95rem'}}>{selectedHouse.note || 'No notes provided.'}</span>
-                </div>
-              </div>
 
-              <div style={s.flexRow}>
-                <div style={s.noteBoxOrange}>
-                  <span style={{...s.detailLabel, marginBottom: '8px', color: '#c2410c'}}><PenTool size={14} /> EMPLOYEE'S NOTE</span>
-                  <span style={{...s.detailValue, fontSize: '0.95rem'}}>{selectedHouse.employeeNote || 'No employee notes provided.'}</span>
+                <div className="col-span-full">
+                  <div style={s.noteBoxGray}>
+                    <span style={{ ...s.detailLabel, marginBottom: '8px' }}><StickyNote size={14} /> GENERAL NOTE</span>
+                    <span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.note || 'No notes provided.'}</span>
+                  </div>
                 </div>
-              </div>
 
+                <div className="col-span-full">
+                  <div style={s.noteBoxOrange}>
+                    <span style={{ ...s.detailLabel, marginBottom: '8px', color: '#c2410c' }}><PenTool size={14} /> EMPLOYEE'S NOTE</span>
+                    <span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.employeeNote || 'No employee notes provided.'}</span>
+                  </div>
+                </div>
+
+              </div>
             </div>
-            
-            <footer style={{ display: 'flex', justifyContent: 'flex-end', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px' }}>
-              <button style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' }} onClick={() => setIsDetailModalOpen(false)}>Close</button>
+
+            <footer style={s.footerBetween}>
+              <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}>
+                <Trash2 size={16} style={{ marginRight: '6px' }} /> {isSaving ? 'Deleting...' : 'Delete Property'}
+              </button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
+                
+                {/* 3. APLICACIÓN SEGURA: Se verifica si onCheckHouse existe antes de llamarla */}
+                <button 
+                  onClick={() => { setIsDetailModalOpen(false); onCheckHouse && onCheckHouse(selectedHouse); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  <ClipboardCheck size={16} /> Quality Check
+                </button>
+                
+                <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>
+              </div>
             </footer>
           </div>
         </div>
