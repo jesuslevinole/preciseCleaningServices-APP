@@ -6,34 +6,17 @@ import {
 } from 'lucide-react';
 import type { Property, Status, Team, Priority, Service } from '../types';
 
-// IMPORTAMOS NUESTRO SERVICIO DE FIREBASE (El que acabamos de corregir en el Paso 1)
+// IMPORTAMOS LOS SERVICIOS DE FIREBASE
 import { propertiesService } from '../services/propertiesService';
+import { settingsService } from '../services/settingsService';
 
-const mockStatuses: Status[] = [
-  { id: '1', order: 1, name: 'PENDING ASSESSMENT', business: 'Regular', color: '#3b82f6' }, 
-  { id: '2', order: 2, name: 'NEEDS TO BE SCHEDULE', business: 'Regular', color: '#8b5cf6' }, 
-  { id: '3', order: 3, name: 'SCHEDULE PENDING', business: 'Regular', color: '#ef4444' }, 
-  { id: '4', order: 4, name: 'IN PROGRESS', business: 'Regular , Cavalry', color: '#f59e0b' } 
-].sort((a, b) => Number(a.order) - Number(b.order));
-
-const mockTeams: Team[] = [
-  { id: '1', name: 'Equipo A', business: '', color: '#10b981' },
-  { id: '2', name: 'Equipo B', business: '', color: '#f59e0b' },
-  { id: '3', name: 'Equipo C', business: '', color: '#9ca3af' },
-];
-
-const mockPriorities: Priority[] = [
-  { id: '1', name: 'HIGH', business: 'a', color: '#ef4444' },
-  { id: '2', name: 'MEDIUM', business: '', color: '#eab308' },
-  { id: '3', name: 'LOW', business: '', color: '#22c55e' }
-];
-
-const mockServices: Service[] = [
-  { id: 's1', name: 'Deep Clean', estimatedTime: '', business: '' },
-  { id: 's2', name: 'Oficina', estimatedTime: '120', business: '' },
-  { id: 's3', name: 'Regular', estimatedTime: '90', business: '' },
-  { id: 's4', name: 'Move-Out', estimatedTime: '150', business: '' }
-];
+// Mapeo de colecciones de Settings
+const collectionMap: Record<string, string> = {
+  team: 'settings_teams',
+  priority: 'settings_priorities',
+  status: 'settings_statuses',
+  service: 'settings_services',
+};
 
 // Selector personalizado y responsivo
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
@@ -91,31 +74,52 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
   
-  // Estado para manejar las cargas asíncronas de Firebase
+  // --- ESTADOS DINÁMICOS DESDE FIREBASE ---
+  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [priorities, setPriorities] = useState<Priority[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const [formData, setFormData] = useState<Property>({
-    id: '', statusId: '', invoiceStatus: '', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: ''
+    id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: ''
   });
 
   // --- TRAER DATOS DE FIREBASE AL CARGAR LA VISTA ---
   useEffect(() => {
-    const fetchProperties = async () => {
+    const fetchAllData = async () => {
+      setIsLoading(true);
       try {
-        setIsLoading(true);
-        const data = await propertiesService.getAll();
-        // Si hay datos en Firebase, sobreescribimos los mocks que venían por prop
-        if(data.length > 0) {
-          setProperties(data);
-        }
+        // Carga paralela de Trabajos y Configuraciones
+        const [
+          propsData,
+          statusData,
+          teamData,
+          prioData,
+          servData
+        ] = await Promise.all([
+          propertiesService.getAll(),
+          settingsService.getAll(collectionMap.status),
+          settingsService.getAll(collectionMap.team),
+          settingsService.getAll(collectionMap.priority),
+          settingsService.getAll(collectionMap.service)
+        ]);
+
+        if (propsData) setProperties(propsData);
+        if (statusData) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
+        if (teamData) setTeams(teamData as Team[]);
+        if (prioData) setPriorities(prioData as Priority[]);
+        if (servData) setServices(servData as Service[]);
+
       } catch (error) {
-        console.error("Error al cargar propiedades desde Firebase:", error);
+        console.error("Error al cargar datos desde Firebase:", error);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchProperties();
+    fetchAllData();
   }, [setProperties]);
 
   // --- ESTILOS INLINE BLINDADOS ---
@@ -152,12 +156,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
     th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
+    
+    // Píldora Dinámica según Firebase
     statusPill: (statusId: string) => {
-      let bg = '#dbeafe', color = '#3b82f6', text = 'Programado';
-      if (statusId === '4') { bg = '#fef3c7'; color = '#d97706'; text = 'En Proceso'; }
-      if (statusId === '2') { bg = '#ede9fe'; color = '#7c3aed'; text = 'QC'; }
-      if (statusId === '3') { bg = '#fee2e2'; color = '#dc2626'; text = 'Recall'; }
-      return { bg, color, text };
+      const status = statuses.find(s => s.id === statusId);
+      if (status) {
+        return { bg: `${status.color}15`, color: status.color, text: status.name };
+      }
+      return { bg: '#f1f5f9', color: '#64748b', text: 'Unassigned' };
     }
   };
 
@@ -165,7 +171,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     if (house) {
       setFormData(house);
     } else {
-      setFormData({ id: '', statusId: mockStatuses[0]?.id || '', invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '' });
+      setFormData({ id: '', statusId: statuses[0]?.id || '', invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '' });
     }
     setSelectedHouse(house || null);
     setIsDetailModalOpen(false);
@@ -177,7 +183,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setSelectedHouse(null);
   };
 
-  // --- FUNCIÓN ASÍNCRONA PARA GUARDAR EN FIREBASE ---
   const handleSave = async () => {
     if (!formData.address) return alert("Address is required.");
     if (!formData.statusId) return alert("Status is required.");
@@ -209,7 +214,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  // --- FUNCIÓN ASÍNCRONA PARA ELIMINAR EN FIREBASE ---
   const handleDelete = async () => {
     if(!selectedHouse) return;
     
@@ -231,8 +235,17 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setIsDetailModalOpen(true);
   };
 
+  // Filtrar tabla dinámicamente
+  const filteredProperties = activeFilter === 'Todos' 
+    ? properties 
+    : properties.filter(p => {
+        const st = statuses.find(s => s.id === p.statusId);
+        return st?.name === activeFilter;
+      });
+
   const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
   const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
+  const kpiIcons = [Briefcase, Clock, ShieldCheck, AlertTriangle];
 
   const today = new Date();
   const dateFormatted = today.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -241,9 +254,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   return (
     <div className="fade-in" style={{ padding: '20px' }}>
 
-      {/* INYECCIÓN DE ESTILOS ESTRATÉGICOS MEJORADA */}
       <style>{`
-        /* Overlay Centrado Absoluto: Flexbox centrará el hijo automáticamente en ambas dimensiones */
         .modal-overlay-centered {
           position: fixed;
           inset: 0; 
@@ -257,7 +268,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           box-sizing: border-box;
         }
 
-        /* Modal Dinámico (70% en PC, ancho total en Móvil) - Sin margin:auto problemático */
         .modal-70 {
           background-color: #ffffff;
           width: 100%;
@@ -269,63 +279,27 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           max-height: 90vh;
         }
         
-        @media (min-width: 769px) {
-          .modal-70 { width: 70%; }
-        }
+        @media (min-width: 769px) { .modal-70 { width: 70%; } }
 
-        /* Rejilla Perfecta de 3 Columnas */
-        .grid-3-cols {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 24px;
-          margin-bottom: 24px;
-        }
-        
-        /* El elemento ocupa todo el ancho del grid */
+        .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
 
-        /* Conversión de Tabla a Tarjetas (Mobile First) */
         @media (max-width: 768px) {
           .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
-          
-          /* Esconder cabecera real de tabla */
           .responsive-table thead { display: none; }
-          
-          /* Convertir fila en tarjeta vertical */
           .responsive-table tr {
-            display: flex;
-            flex-direction: column;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            margin-bottom: 16px;
-            padding: 16px;
-            background: #ffffff;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            display: flex; flex-direction: column; border: 1px solid #e5e7eb; border-radius: 12px;
+            margin-bottom: 16px; padding: 16px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
           }
-          
-          /* Convertir celda en renglón flex (label a la izquierda, valor a la derecha) */
           .responsive-table td {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #f1f5f9;
-            text-align: right;
-            white-space: normal !important;
+            display: flex; justify-content: space-between; alignItems: center; padding: 10px 0;
+            border-bottom: 1px solid #f1f5f9; text-align: right; white-space: normal !important;
           }
-          
           .responsive-table td:last-child { border-bottom: none; padding-bottom: 0; }
-          
-          /* Etiqueta inyectada dinámicamente desde el HTML */
           .responsive-table td::before {
-            content: attr(data-label);
-            font-weight: 700;
-            color: #6b7280;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            content: attr(data-label); font-weight: 700; color: #6b7280; font-size: 0.75rem;
+            text-transform: uppercase; letter-spacing: 0.5px;
           }
-
           .mobile-client-cell { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
         }
       `}</style>
@@ -356,40 +330,25 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
       </header>
 
-      {/* KPI CARDS SUPERIORES */}
+      {/* KPI CARDS SUPERIORES DINÁMICAS (Toma los primeros 4 estados de Firebase) */}
       <div className="dash-grid">
-        <div style={s.kpiCard}>
-          <div style={s.kpiIconBox('#10b981')}><Briefcase size={22} /></div>
-          <div>
-            <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>Trabajos hoy</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{isLoading ? '...' : properties.length}</div>
-            <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>+3 vs ayer</div>
-          </div>
-        </div>
-        <div style={s.kpiCard}>
-          <div style={s.kpiIconBox('#f59e0b')}><Clock size={22} /></div>
-          <div>
-            <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>En Proceso</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{isLoading ? '...' : properties.filter(p => p.statusId === '4').length}</div>
-            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>2 equipos activos</div>
-          </div>
-        </div>
-        <div style={s.kpiCard}>
-          <div style={s.kpiIconBox('#8b5cf6')}><ShieldCheck size={22} /></div>
-          <div>
-            <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>QC Pendiente</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{isLoading ? '...' : properties.filter(p => p.statusId === '2').length}</div>
-            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Esperando revisión</div>
-          </div>
-        </div>
-        <div style={s.kpiCard}>
-          <div style={s.kpiIconBox('#ef4444')}><AlertTriangle size={22} /></div>
-          <div>
-            <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>Recalls</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{isLoading ? '...' : properties.filter(p => p.statusId === '3').length}</div>
-            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Esta semana</div>
-          </div>
-        </div>
+        {isLoading ? (
+          <div style={{ color: '#6b7280' }}>Cargando métricas...</div>
+        ) : (
+          statuses.slice(0, 4).map((status, index) => {
+            const Icon = kpiIcons[index % kpiIcons.length];
+            const count = properties.filter(p => p.statusId === status.id).length;
+            return (
+              <div style={s.kpiCard} key={status.id}>
+                <div style={s.kpiIconBox(status.color)}><Icon size={22} /></div>
+                <div>
+                  <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>{status.name}</div>
+                  <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{count}</div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* CONTENIDO PRINCIPAL A 2 COLUMNAS */}
@@ -404,11 +363,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
+              {/* FILTROS DINÁMICOS DESDE FIREBASE */}
               <div className="dashboard-filters">
                 <button onClick={() => setActiveFilter('Todos')} style={s.pillBtn(activeFilter === 'Todos')}>Todos</button>
-                <button onClick={() => setActiveFilter('Programado')} style={s.pillBtn(activeFilter === 'Programado')}>Programado</button>
-                <button onClick={() => setActiveFilter('En Proceso')} style={s.pillBtn(activeFilter === 'En Proceso')}>En Proceso</button>
-                <button onClick={() => setActiveFilter('QC')} style={s.pillBtn(activeFilter === 'QC')}>QC</button>
+                {statuses.map(st => (
+                  <button key={st.id} onClick={() => setActiveFilter(st.name)} style={s.pillBtn(activeFilter === st.name)}>
+                    {st.name}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -428,11 +390,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr><td colSpan={7} style={{textAlign: 'center', padding: '40px', color: '#6b7280'}}>Cargando trabajos...</td></tr>
-                  ) : properties.map((prop, idx) => {
+                    <tr><td colSpan={7} style={{textAlign: 'center', padding: '40px', color: '#6b7280'}}>Cargando base de datos...</td></tr>
+                  ) : filteredProperties.length === 0 ? (
+                    <tr><td colSpan={7} style={{textAlign: 'center', padding: '40px', color: '#6b7280', fontStyle: 'italic'}}>No hay trabajos para mostrar.</td></tr>
+                  ) : filteredProperties.map((prop, idx) => {
                     const statusInfo = s.statusPill(prop.statusId);
-                    const teamName = mockTeams.find(t => t.id === prop.teamId)?.name || 'Sin Asignar';
-                    const serviceName = mockServices.find(srv => srv.id === prop.serviceId)?.name || 'Regular';
+                    const teamName = teams.find(t => t.id === prop.teamId)?.name || 'Sin Asignar';
+                    const serviceName = services.find(srv => srv.id === prop.serviceId)?.name || 'Regular';
                     const mockId = prop.id.length > 5 ? prop.id.substring(0, 6) : `J-104${idx + 2}`;
 
                     return (
@@ -476,43 +440,44 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           </div>
         </div>
 
-        {/* COLUMNA DERECHA: EQUIPOS ACTIVOS */}
+        {/* COLUMNA DERECHA: EQUIPOS ACTIVOS DINÁMICOS */}
         <div className="right-col">
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', padding: '20px' }}>
             <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Equipos Activos</h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}><Users size={18} /></div>
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Equipo A</div>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Garcia Family - QC</div>
+              {isLoading ? (
+                <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Cargando equipos...</div>
+              ) : teams.length === 0 ? (
+                <div style={{ color: '#6b7280', fontSize: '0.9rem', fontStyle: 'italic' }}>No hay equipos configurados.</div>
+              ) : (
+                teams.map(team => {
+                  // Contamos trabajos asignados a este equipo hoy
+                  const assignedProps = properties.filter(p => p.teamId === team.id);
+                  
+                  return (
+                    <div key={team.id} style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: `${team.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: team.color }}>
+                            <Users size={18} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{team.name}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                              {assignedProps.length > 0 ? `${assignedProps.length} trabajos hoy` : 'Libre'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Barra visual de estado del equipo */}
+                      <div style={{ width: '100%', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', marginTop: '12px' }}>
+                        <div style={{ width: assignedProps.length > 0 ? '100%' : '0%', height: '100%', backgroundColor: team.color, borderRadius: '2px' }}></div>
+                      </div>
                     </div>
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 }}>3 miembros</span>
-                </div>
-                <div style={{ width: '100%', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', marginTop: '12px' }}>
-                  <div style={{ width: '85%', height: '100%', backgroundColor: '#10b981', borderRadius: '2px' }}></div>
-                </div>
-              </div>
-
-              <div style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}><Users size={18} /></div>
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Equipo B</div>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Downtown Office Co.</div>
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 }}>2 miembros</span>
-                </div>
-                <div style={{ width: '100%', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', marginTop: '12px' }}>
-                  <div style={{ width: '45%', height: '100%', backgroundColor: '#f59e0b', borderRadius: '2px' }}></div>
-                </div>
-              </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -547,7 +512,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
                 <div>
                   <label style={s.label}>Status <span style={{ color: '#3b82f6' }}>*</span></label>
-                  <CustomSelect options={mockStatuses} value={formData.statusId} onChange={(val: string) => setFormData({ ...formData, statusId: val })} placeholder="Select Status..." icon={Activity} />
+                  <CustomSelect options={statuses} value={formData.statusId} onChange={(val: string) => setFormData({ ...formData, statusId: val })} placeholder="Select Status..." icon={Activity} />
                 </div>
 
                 <div>
@@ -556,11 +521,11 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
                 <div>
                   <label style={s.label}>Services</label>
-                  <CustomSelect options={mockServices} value={formData.serviceId} onChange={(val: string) => setFormData({ ...formData, serviceId: val })} placeholder="Select Service..." icon={Wrench} />
+                  <CustomSelect options={services} value={formData.serviceId} onChange={(val: string) => setFormData({ ...formData, serviceId: val })} placeholder="Select Service..." icon={Wrench} />
                 </div>
                 <div>
                   <label style={s.label}>Priority</label>
-                  <CustomSelect options={mockPriorities} value={formData.priorityId} onChange={(val: string) => setFormData({ ...formData, priorityId: val })} placeholder="Select Priority..." icon={Flag} />
+                  <CustomSelect options={priorities} value={formData.priorityId} onChange={(val: string) => setFormData({ ...formData, priorityId: val })} placeholder="Select Priority..." icon={Flag} />
                 </div>
 
                 <div>
@@ -579,7 +544,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
                 <div>
                   <label style={s.label}>Team</label>
-                  <CustomSelect options={mockTeams} value={formData.teamId} onChange={(val: string) => setFormData({ ...formData, teamId: val })} placeholder="Assign Team..." icon={Users} />
+                  <CustomSelect options={teams} value={formData.teamId} onChange={(val: string) => setFormData({ ...formData, teamId: val })} placeholder="Assign Team..." icon={Users} />
                 </div>
 
                 <div>
@@ -657,8 +622,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    <span style={{ backgroundColor: mockStatuses.find(st => st.id === selectedHouse.statusId)?.color || '#ccc', width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
-                    <span style={s.detailValue}>{mockStatuses.find(st => st.id === selectedHouse.statusId)?.name || 'UNASSIGNED'}</span>
+                    <span style={{ backgroundColor: statuses.find(st => st.id === selectedHouse.statusId)?.color || '#ccc', width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
+                    <span style={s.detailValue}>{statuses.find(st => st.id === selectedHouse.statusId)?.name || 'UNASSIGNED'}</span>
                   </div>
                 </div>
                 <div style={s.detailItem}>
@@ -680,7 +645,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Wrench size={14} /> SERVICE</span>
-                  <span style={s.detailValue}>{mockServices.find(srv => srv.id === selectedHouse.serviceId)?.name || '-'}</span>
+                  <span style={s.detailValue}>{services.find(srv => srv.id === selectedHouse.serviceId)?.name || '-'}</span>
                 </div>
 
                 <div style={s.detailItem}>
@@ -694,8 +659,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Flag size={14} /> PRIORITY</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    {mockPriorities.find(p => p.id === selectedHouse.priorityId)?.color && <span style={{ backgroundColor: mockPriorities.find(p => p.id === selectedHouse.priorityId)?.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-                    <span style={s.detailValue}>{mockPriorities.find(p => p.id === selectedHouse.priorityId)?.name || '-'}</span>
+                    {priorities.find(p => p.id === selectedHouse.priorityId)?.color && <span style={{ backgroundColor: priorities.find(p => p.id === selectedHouse.priorityId)?.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
+                    <span style={s.detailValue}>{priorities.find(p => p.id === selectedHouse.priorityId)?.name || '-'}</span>
                   </div>
                 </div>
 
@@ -710,8 +675,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Users size={14} /> TEAM</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    {mockTeams.find(t => t.id === selectedHouse.teamId)?.color && <span style={{ backgroundColor: mockTeams.find(t => t.id === selectedHouse.teamId)?.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-                    <span style={s.detailValue}>{mockTeams.find(t => t.id === selectedHouse.teamId)?.name || 'Unassigned'}</span>
+                    {teams.find(t => t.id === selectedHouse.teamId)?.color && <span style={{ backgroundColor: teams.find(t => t.id === selectedHouse.teamId)?.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
+                    <span style={s.detailValue}>{teams.find(t => t.id === selectedHouse.teamId)?.name || 'Unassigned'}</span>
                   </div>
                 </div>
 
