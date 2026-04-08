@@ -4,11 +4,12 @@ import {
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
   Bell, Briefcase, ShieldCheck, AlertTriangle
 } from 'lucide-react';
-import type { Property, Status, Team, Priority, Service } from '../types';
+import type { Property, Status, Team, Priority, Service, Customer } from '../types';
 
 // IMPORTAMOS LOS SERVICIOS DE FIREBASE
 import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
+import { customersService } from '../services/customersService'; // <-- Nuevo servicio inyectado
 
 // Mapeo de colecciones de Settings
 const collectionMap: Record<string, string> = {
@@ -21,7 +22,7 @@ const collectionMap: Record<string, string> = {
 // Selector personalizado y responsivo
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  const selected = options.find((o: any) => o.id === value);
+  const selected = options.find((o: any) => o.id === value || o.name === value); // Modificado para aceptar 'name' en caso de clientes/servicios
 
   return (
     <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
@@ -32,9 +33,11 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
         <Icon size={16} style={{ position: 'absolute', left: '14px', color: '#6b7280' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {selected?.color && <span style={{ backgroundColor: selected.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-          <span style={{ color: selected ? '#111827' : '#9ca3af' }}>{selected ? selected.name : placeholder}</span>
+          <span style={{ color: selected ? '#111827' : '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>
+            {selected ? selected.name : placeholder}
+          </span>
         </div>
-        <ChevronDown size={16} color="#9ca3af" style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+        <ChevronDown size={16} color="#9ca3af" style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />
       </div>
 
       {isOpen && (
@@ -46,7 +49,8 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
             <div 
               key={o.id} 
               style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
-              onMouseDown={(e) => { e.preventDefault(); onChange(o.id); setIsOpen(false); }}
+              // Si es cliente pasamos el nombre, si es configuración pasamos el ID
+              onMouseDown={(e) => { e.preventDefault(); onChange(o.name || o.id); setIsOpen(false); }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
@@ -79,6 +83,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [teams, setTeams] = useState<Team[]>([]);
   const [priorities, setPriorities] = useState<Priority[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [customersList, setCustomersList] = useState<Customer[]>([]); // Nuevo estado para clientes
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,19 +97,21 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        // Carga paralela de Trabajos y Configuraciones
+        // Carga paralela de Trabajos, Configuraciones y CLIENTES
         const [
           propsData,
           statusData,
           teamData,
           prioData,
-          servData
+          servData,
+          custData
         ] = await Promise.all([
           propertiesService.getAll(),
           settingsService.getAll(collectionMap.status),
           settingsService.getAll(collectionMap.team),
           settingsService.getAll(collectionMap.priority),
-          settingsService.getAll(collectionMap.service)
+          settingsService.getAll(collectionMap.service),
+          customersService.getAll() // Carga real de clientes
         ]);
 
         if (propsData) setProperties(propsData);
@@ -112,6 +119,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         if (teamData) setTeams(teamData as Team[]);
         if (prioData) setPriorities(prioData as Priority[]);
         if (servData) setServices(servData as Service[]);
+        if (custData) setCustomersList(custData);
 
       } catch (error) {
         console.error("Error al cargar datos desde Firebase:", error);
@@ -171,7 +179,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     if (house) {
       setFormData(house);
     } else {
-      setFormData({ id: '', statusId: statuses[0]?.id || '', invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '' });
+      // Intentamos seleccionar el primer estado por defecto para evitar errores
+      const defaultStatus = statuses.length > 0 ? statuses[0].id : '';
+      setFormData({ id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '' });
     }
     setSelectedHouse(house || null);
     setIsDetailModalOpen(false);
@@ -183,7 +193,23 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setSelectedHouse(null);
   };
 
+  // --- LÓGICA DE AUTOCOMPLETADO DE CLIENTE ---
+  const handleCustomerSelect = (customerName: string) => {
+    const selectedCust = customersList.find(c => c.name === customerName);
+    
+    if (selectedCust) {
+      setFormData({
+        ...formData,
+        client: customerName,
+        address: selectedCust.address || formData.address // Autocompleta la dirección si el cliente la tiene registrada
+      });
+    } else {
+      setFormData({ ...formData, client: customerName });
+    }
+  };
+
   const handleSave = async () => {
+    if (!formData.client) return alert("Client is required.");
     if (!formData.address) return alert("Address is required.");
     if (!formData.statusId) return alert("Status is required.");
 
@@ -496,12 +522,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <div style={s.body}>
               <div className="grid-3-cols">
 
+                {/* 1. SELECCIÓN DE CLIENTE INTEGRADA A FIREBASE */}
                 <div>
-                  <label style={s.label}>Client</label>
-                  <div style={s.inputWrapper}>
-                    <User style={s.icon} size={16} />
-                    <input type="text" style={s.input} placeholder="Type client name..." value={formData.client} onChange={e => setFormData({ ...formData, client: e.target.value })} />
-                  </div>
+                  <label style={s.label}>Client <span style={{ color: '#3b82f6' }}>*</span></label>
+                  <CustomSelect 
+                    options={customersList} 
+                    value={formData.client} 
+                    onChange={handleCustomerSelect} // Activa el autocompletado de dirección
+                    placeholder="Select Client..." 
+                    icon={User} 
+                  />
                 </div>
                 <div>
                   <label style={s.label}>Address <span style={{ color: '#3b82f6' }}>*</span></label>
