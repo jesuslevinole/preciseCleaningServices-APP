@@ -1,17 +1,16 @@
 import { db } from '../config/firebase';
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  addDoc 
-} from 'firebase/firestore'; // Eliminamos updateDoc y doc que no se usan
-import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
-
-// CORRECCIÓN: Ruta explícita al index.ts de la carpeta types
+import app from '../config/firebase'; // Importamos la app principal
+import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
 import type { SystemUser } from '../types/index';
 
 const USERS_COLLECTION = 'system_users';
+
+// TRUCO DE ARQUITECTO: Creamos una instancia secundaria de Firebase.
+// Esto permite crear nuevos usuarios en Auth sin cerrar la sesión del Administrador actual.
+const secondaryApp = initializeApp(app.options, "SecondaryApp");
+const secondaryAuth = getAuth(secondaryApp);
 
 export const usersService = {
   // Verifica si el email está registrado en el módulo de usuarios
@@ -24,23 +23,38 @@ export const usersService = {
     return !querySnapshot.empty;
   },
 
-  // Agrega un usuario y dispara el email de configuración de contraseña
+  // Agrega un usuario, lo crea en Auth y dispara el email
   async inviteUser(userData: Omit<SystemUser, 'id'>) {
-    const auth = getAuth();
-    
-    // 1. Guardar en Firestore
+    const targetEmail = userData.email.toLowerCase().trim();
+
+    // 1. Guardar en la base de datos Firestore (Whitelist)
     const docRef = await addDoc(collection(db, USERS_COLLECTION), {
       ...userData,
-      email: userData.email.toLowerCase().trim(),
+      email: targetEmail,
       status: 'Pending Invite'
     });
 
-    // 2. Enviar email para que el usuario ponga su contraseña
-    // Firebase enviará un link seguro a su correo
     try {
-      await sendPasswordResetEmail(auth, userData.email);
-    } catch (error) {
-      console.error("Error sending invite email:", error);
+      // 2. Crear el usuario en Firebase Auth usando la app secundaria
+      // Le ponemos una contraseña temporal súper segura que nadie sabrá
+      const tempPassword = Math.random().toString(36).slice(-10) + "A1@x!";
+      await createUserWithEmailAndPassword(secondaryAuth, targetEmail, tempPassword);
+
+      // 3. Enviar el correo oficial para que el usuario ponga su propia contraseña
+      await sendPasswordResetEmail(secondaryAuth, targetEmail);
+      
+      // 4. Cerrar sesión en la app secundaria (limpieza)
+      await signOut(secondaryAuth);
+      
+      console.log("Usuario creado en Auth y correo enviado exitosamente.");
+    } catch (error: any) {
+      console.error("Error en el proceso de Auth:", error);
+      
+      // Si el usuario ya existía en Auth, simplemente le enviamos el correo de recuperación
+      if (error.code === 'auth/email-already-in-use') {
+         await sendPasswordResetEmail(getAuth(app), targetEmail);
+         console.log("El usuario ya existía, se reenvió el correo de recuperación.");
+      }
     }
 
     return docRef.id;
