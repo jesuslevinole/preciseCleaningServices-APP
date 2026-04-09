@@ -191,12 +191,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           customersService.getAll().catch(e => { console.error("Error Customers:", e); return []; }) 
         ]);
 
-        if (propsData && propsData.length > 0) setProperties(propsData);
-        if (statusData && statusData.length > 0) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
-        if (teamData && teamData.length > 0) setTeams(teamData as Team[]);
-        if (prioData && prioData.length > 0) setPriorities(prioData as Priority[]);
-        if (servData && servData.length > 0) setServices(servData as Service[]);
-        if (custData && custData.length > 0) setCustomersList(custData);
+        // CORRECCIÓN CLAVE: Quitamos el chequeo de '.length > 0' para que, 
+        // si Firebase devuelve vacío (porque no hay datos), se borre la data de prueba.
+        if (propsData) setProperties(propsData);
+        if (statusData) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
+        if (teamData) setTeams(teamData as Team[]);
+        if (prioData) setPriorities(prioData as Priority[]);
+        if (servData) setServices(servData as Service[]);
+        if (custData) setCustomersList(custData);
 
       } catch (error) {
         console.error("Critical error loading Firebase data:", error);
@@ -255,7 +257,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
 
-    // --- CLASES AGREGADAS PARA CORREGIR EL ERROR TS ---
     dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' } as React.CSSProperties,
     mainColumns: { display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'flex-start' } as React.CSSProperties,
   };
@@ -303,7 +304,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       let isNew = false;
       
       if (!workingId) {
-        // CORRECCIÓN: Evitamos mutar con delete, usamos desestructuración
         const { id, ...restOfData } = formData;
         const dataToCreate = { 
           ...restOfData, 
@@ -331,7 +331,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         afterPhotos: [...(formData.afterPhotos || []), ...uploadedAfterUrls]
       };
 
-      // CORRECCIÓN: 'as any' para evitar conflictos de tipos literales
       await propertiesService.update(workingId, finalDataToUpdate as any);
 
       if (isNew) {
