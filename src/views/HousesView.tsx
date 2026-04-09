@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
-  ChevronLeft, ChevronRight, X, Edit2, Trash2, 
-  Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck, MapPin
+  Search, MapPin, Plus, X, Edit2, Trash2, 
+  Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
+  Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy
 } from 'lucide-react';
 import type { Property, Status, Team, Priority, Service, Customer } from '../types';
 
-// --- FIREBASE SERVICES ---
+// FIREBASE SERVICES
 import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
 import { customersService } from '../services/customersService';
@@ -18,11 +19,9 @@ const collectionMap: Record<string, string> = {
   service: 'settings_services',
 };
 
-// --- CUSTOM COMPONENTS & HELPERS (A Prueba de Balas) ---
+// --- CUSTOM SELECTORS ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  
-  // Búsqueda inteligente: ignora mayúsculas y espacios para compatibilidad con registros viejos
   const safeValue = String(value || '').toLowerCase().trim();
   const selected = options.find((o: any) => 
     String(o.id).toLowerCase().trim() === safeValue || 
@@ -68,57 +67,116 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
   );
 };
 
-// Funciones de mapeo seguras
+// --- INLINE STATUS PILL SELECTOR ---
+const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: { currentStatusId: string, statuses: Status[], onChange: (id: string) => void, disabled: boolean }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const safeValue = String(currentStatusId || '').toLowerCase().trim();
+  const status = statuses.find(s => String(s.id).toLowerCase().trim() === safeValue || String(s.name).toLowerCase().trim() === safeValue);
+  
+  const pointColor = status ? status.color : '#64748b';
+  const text = status ? status.name : 'Unassigned';
+
+  return (
+    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', display: 'inline-block', outline: 'none' }}>
+      <div 
+        onClick={(e) => { e.stopPropagation(); if(!disabled) setIsOpen(!isOpen); }}
+        style={{ 
+          backgroundColor: 'transparent', color: '#111827', padding: '6px 12px', borderRadius: '20px', 
+          fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px',
+          cursor: disabled ? 'not-allowed' : 'pointer', border: '1px solid #e5e7eb', transition: 'all 0.2s',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+        }}
+        onMouseEnter={(e) => { if(!disabled) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+        onMouseLeave={(e) => { if(!disabled) e.currentTarget.style.backgroundColor = 'transparent'; }}
+      >
+        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: pointColor }}></span>
+        {text}
+        <ChevronDown size={14} color="#9ca3af" style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+      </div>
+
+      {isOpen && (
+        <div style={{ 
+          position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'white', 
+          border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', 
+          zIndex: 9999, minWidth: '180px', overflow: 'hidden', textAlign: 'left'
+        }}>
+          {statuses.map((s) => (
+            <div 
+              key={s.id}
+              onMouseDown={(e) => { 
+                e.preventDefault(); 
+                e.stopPropagation();
+                if(s.id !== currentStatusId && s.name !== currentStatusId) onChange(s.id); 
+                setIsOpen(false); 
+              }}
+              style={{ 
+                padding: '12px 14px', fontSize: '0.85rem', fontWeight: 500, color: '#111827', 
+                display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
+                backgroundColor: (currentStatusId === s.id || currentStatusId === s.name) ? '#f8fafc' : 'transparent',
+                borderBottom: '1px solid #f1f5f9'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = (currentStatusId === s.id || currentStatusId === s.name) ? '#f8fafc' : 'transparent'}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: s.color, flexShrink: 0 }}></span>
+              {s.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Helper Functions
 const getRelationName = (list: any[], idOrName: string, fallback = '-') => {
   if (!idOrName) return fallback;
   const safeVal = String(idOrName).toLowerCase().trim();
-  const found = list.find(item => 
-    String(item.id).toLowerCase().trim() === safeVal || 
-    String(item.name).toLowerCase().trim() === safeVal
-  );
+  const found = list.find(item => String(item.id).toLowerCase().trim() === safeVal || String(item.name).toLowerCase().trim() === safeVal);
   return found ? found.name : fallback;
 };
 
 const getRelationColor = (list: any[], idOrName: string) => {
   if (!idOrName) return undefined;
   const safeVal = String(idOrName).toLowerCase().trim();
-  return list.find(item => 
-    String(item.id).toLowerCase().trim() === safeVal || 
-    String(item.name).toLowerCase().trim() === safeVal
-  )?.color;
+  return list.find(item => String(item.id).toLowerCase().trim() === safeVal || String(item.name).toLowerCase().trim() === safeVal)?.color;
 };
 
-interface CalendarViewProps {
+interface HousesViewProps {
   onOpenMenu: () => void;
-  onCheckHouse?: (house: Property) => void;
-  properties?: Property[]; 
+  properties: Property[];
+  setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
+  onCheckHouse: (house: Property) => void;
 }
 
-export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewProps) {
+export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse }: HousesViewProps) {
   
-  // --- FIREBASE STATES ---
-  const [propertiesList, setPropertiesList] = useState<Property[]>([]);
-  const [statuses, setStatuses] = useState<Status[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [priorities, setPriorities] = useState<Priority[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [customersList, setCustomersList] = useState<Customer[]>([]);
-
-  // --- UI STATES ---
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [currentDate, setCurrentDate] = useState(new Date());
-
-  // --- MODAL STATES ---
+  const [activeFilter, setActiveFilter] = useState('All');
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
   
+  // --- FIREBASE STATES ---
+  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [priorities, setPriorities] = useState<Priority[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [customersList, setCustomersList] = useState<Customer[]>([]); 
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: ''
   });
 
-  // --- FETCH DATA ---
+  // --- PHOTO STATES (Mockup for now) ---
+  const [beforePhotos, setBeforePhotos] = useState<string[]>([]);
+  const [afterPhotos, setAfterPhotos] = useState<string[]>([]);
+  const beforeInputRef = useRef<HTMLInputElement>(null);
+  const afterInputRef = useRef<HTMLInputElement>(null);
+
+  // --- FETCH DATA FROM FIREBASE ON MOUNT ---
   useEffect(() => {
     const fetchAllData = async () => {
       setIsLoading(true);
@@ -132,60 +190,97 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
           customersService.getAll() 
         ]);
 
-        if (propsData) setPropertiesList(propsData);
+        if (propsData) setProperties(propsData);
         if (statusData) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
         if (teamData) setTeams(teamData as Team[]);
         if (prioData) setPriorities(prioData as Priority[]);
         if (servData) setServices(servData as Service[]);
         if (custData) setCustomersList(custData);
+
       } catch (error) {
-        console.error("Error loading data:", error);
+        console.error("Error loading data from Firebase:", error);
       } finally {
         setIsLoading(false);
       }
     };
     fetchAllData();
-  }, []);
+  }, [setProperties]);
 
-  // --- CALENDAR LOGIC ---
-  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const days = [];
-    
-    for (let i = 0; i < firstDay.getDay(); i++) {
-      days.push(null);
+  // --- QUICK INLINE STATUS CHANGE LOGIC ---
+  const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
+    setIsSaving(true);
+    try {
+      await propertiesService.update(propertyId, { statusId: newStatusId });
+      setProperties(properties.map(p => p.id === propertyId ? { ...p, statusId: newStatusId } : p));
+      
+      if (selectedHouse && selectedHouse.id === propertyId) {
+        setSelectedHouse({ ...selectedHouse, statusId: newStatusId });
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to update job status.");
+    } finally {
+      setIsSaving(false);
     }
-    for (let i = 1; i <= lastDay.getDate(); i++) {
-      days.push(new Date(year, month, i));
-    }
-    return days;
   };
 
-  const calendarDays = getDaysInMonth(currentDate);
-  
-  const monthNameRaw = currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
-  const monthName = monthNameRaw.charAt(0).toUpperCase() + monthNameRaw.slice(1);
-  const weekDays = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  // --- SECURE INLINE STYLES ---
+  const s = {
+    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
+    title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
+    body: { padding: '30px', overflowY: 'auto', paddingBottom: '60px' } as React.CSSProperties, 
+    footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
+    footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
 
-  // --- MODAL HANDLERS ---
+    label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' } as React.CSSProperties,
+    inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', width: '100%' } as React.CSSProperties,
+    icon: { position: 'absolute', left: '14px', color: '#6b7280', pointerEvents: 'none' } as React.CSSProperties,
+    input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s' } as React.CSSProperties,
+
+    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s', opacity: isSaving ? 0.7 : 1 } as React.CSSProperties,
+    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
+    btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
+    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' },
+
+    detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
+    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } as React.CSSProperties,
+    detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
+    detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
+    noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
+    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', width: '100%' } as React.CSSProperties,
+
+    dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' },
+    kpiCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' },
+    kpiIconBox: (color: string) => ({ backgroundColor: `${color}15`, color: color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
+    mainColumns: { display: 'flex', gap: '24px', flexWrap: 'wrap' as const },
+    tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' } as React.CSSProperties,
+    pillBtn: (active: boolean) => ({ padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: active ? '#10b981' : 'transparent', color: active ? 'white' : '#6b7280', transition: 'all 0.2s', whiteSpace: 'nowrap' as const }),
+
+    th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
+    td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
+  };
+
   const handleOpenForm = (house?: Property) => {
     if (house) {
       setFormData(house);
     } else {
       const defaultStatus = statuses.length > 0 ? statuses[0].id : '';
-      setFormData({ 
-        id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], 
-        scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', 
-        rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '' 
-      });
+      setFormData({ id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '' });
     }
     setSelectedHouse(house || null);
+    setIsDetailModalOpen(false);
+    setIsFormModalOpen(true);
+  };
+
+  // --- DUPLICATION LOGIC ---
+  const handleDuplicate = () => {
+    if (!selectedHouse) return;
+    // Set the form data to the selected house's data, BUT clear the ID so it creates a new record
+    setFormData({
+      ...selectedHouse,
+      id: ''
+    });
+    // Open form modal for editing before saving
     setIsDetailModalOpen(false);
     setIsFormModalOpen(true);
   };
@@ -198,7 +293,11 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
   const handleCustomerSelect = (customerName: string) => {
     const selectedCust = customersList.find(c => c.name === customerName);
     if (selectedCust) {
-      setFormData({ ...formData, client: customerName, address: selectedCust.address || formData.address });
+      setFormData({
+        ...formData,
+        client: customerName,
+        address: selectedCust.address || formData.address 
+      });
     } else {
       setFormData({ ...formData, client: customerName });
     }
@@ -207,27 +306,29 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
   const handleSave = async () => {
     if (!formData.client) return alert("Client is required.");
     if (!formData.address) return alert("Address is required.");
-    
+
     setIsSaving(true);
     try {
-      if (selectedHouse && selectedHouse.id) {
+      if (formData.id) { // Solo si formData tiene ID, es una actualización
         const { id, ...dataToUpdate } = formData; 
-        await propertiesService.update(selectedHouse.id, dataToUpdate);
-        setPropertiesList(propertiesList.map(p => p.id === selectedHouse.id ? { ...formData } : p));
-      } else {
+        await propertiesService.update(formData.id, dataToUpdate);
+        setProperties(properties.map(p => p.id === formData.id ? { ...formData } : p));
+      } else { // Si no tiene ID (creación nueva o duplicado)
         const { id, ...dataToAdd } = formData; 
         const completeData = {
           ...dataToAdd,
           description: `${formData.client} - ${formData.rooms} rooms`,
-          city: 'TBD', size: 'TBD'
+          city: 'TBD',
+          size: 'TBD'
         };
+
         const newId = await propertiesService.create(completeData as unknown as Omit<Property, 'id'>);
-        setPropertiesList([...propertiesList, { ...formData, id: newId, description: completeData.description, city: completeData.city, size: completeData.size }]);
+        setProperties([...properties, { ...formData, id: newId, description: completeData.description, city: completeData.city, size: completeData.size }]);
       }
       handleCloseForm();
     } catch (error) {
       console.error("Error saving to Firebase:", error);
-      alert("Error trying to save property.");
+      alert("Error trying to save property to Firebase.");
     } finally {
       setIsSaving(false);
     }
@@ -235,146 +336,296 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
 
   const handleDelete = async () => {
     if(!selectedHouse) return;
+    
     setIsSaving(true);
     try {
       await propertiesService.delete(selectedHouse.id);
-      setPropertiesList(propertiesList.filter(p => p.id !== selectedHouse.id));
+      setProperties(properties.filter(p => p.id !== selectedHouse.id));
       setIsDetailModalOpen(false);
     } catch (error) {
-      console.error("Error deleting:", error);
+      console.error("Error deleting from Firebase:", error);
       alert("Error trying to delete property.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
-  const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
-
-  // --- STYLES OBJECT ---
-  const s = {
-    overlayCentered: { position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px', boxSizing: 'border-box' } as React.CSSProperties,
-    modal70: { backgroundColor: '#ffffff', width: '100%', maxWidth: '1000px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' } as React.CSSProperties,
-    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
-    title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
-    body: { padding: '30px', overflowY: 'auto', paddingBottom: '60px' } as React.CSSProperties,
-    footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
-    footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
-    label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' } as React.CSSProperties,
-    inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', width: '100%' } as React.CSSProperties,
-    icon: { position: 'absolute', left: '14px', color: '#6b7280', pointerEvents: 'none' } as React.CSSProperties,
-    input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s' } as React.CSSProperties,
-    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s', opacity: isSaving ? 0.7 : 1 } as React.CSSProperties,
-    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
-    btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
-    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' },
-    detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
-    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } as React.CSSProperties,
-    detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
-    detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
-    noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
-    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', width: '100%' } as React.CSSProperties,
+  const handleOpenDetail = (house: Property) => {
+    setSelectedHouse(house);
+    // Reset local photo states when opening a new detail modal
+    setBeforePhotos([]);
+    setAfterPhotos([]);
+    setIsDetailModalOpen(true);
   };
 
+  // --- PHOTO HANDLING LOGIC (Local State Mockup) ---
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'before' | 'after') => {
+    if (e.target.files && e.target.files.length > 0) {
+      const fileUrls = Array.from(e.target.files).map(file => URL.createObjectURL(file));
+      if (type === 'before') {
+        setBeforePhotos(prev => [...prev, ...fileUrls]);
+      } else {
+        setAfterPhotos(prev => [...prev, ...fileUrls]);
+      }
+    }
+  };
+
+  const filteredProperties = activeFilter === 'All' 
+    ? properties 
+    : properties.filter(p => {
+        const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
+        return st?.name === activeFilter;
+      });
+
+  const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
+  const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
+  const kpiIcons = [Briefcase, Clock, ShieldCheck, AlertTriangle];
+
+  const today = new Date();
+  const dateFormatted = today.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateCapitalized = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1);
+
   return (
-    <div className="fade-in" style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      
-      {/* INJECTED CALENDAR CSS */}
+    <div className="fade-in" style={{ padding: '20px' }}>
+
       <style>{`
-        .calendar-wrapper { display: flex; flex-direction: column; flex: 1; background: white; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
-        .calendar-header-grid { display: grid; grid-template-columns: repeat(7, 1fr); background-color: #f8fafc; border-bottom: 1px solid #e5e7eb; }
-        .calendar-header-cell { padding: 12px; text-align: center; font-weight: 600; font-size: 0.85rem; color: #64748b; text-transform: uppercase; }
-        .calendar-body-grid { display: grid; grid-template-columns: repeat(7, 1fr); flex: 1; background-color: #e5e7eb; gap: 1px; }
-        .calendar-day-cell { background-color: #ffffff; min-height: 120px; padding: 8px; display: flex; flex-direction: column; gap: 4px; transition: background-color 0.2s; }
-        .calendar-day-cell:hover { background-color: #f8fafc; }
-        .calendar-day-cell.empty { background-color: #f9fafb; cursor: default; }
-        .calendar-date-number { font-weight: 600; font-size: 0.95rem; color: #1e293b; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+        .modal-overlay-centered {
+          position: fixed;
+          inset: 0; 
+          background-color: rgba(15, 23, 42, 0.6);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+          padding: 20px;
+          box-sizing: border-box;
+        }
+
+        .modal-70 {
+          background-color: #ffffff;
+          width: 100%;
+          max-width: 1000px;
+          border-radius: 12px;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          display: flex;
+          flex-direction: column;
+          max-height: 90vh;
+        }
         
-        .calendar-event { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid rgba(0,0,0,0.05); }
-        .calendar-event:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); filter: brightness(0.95); }
+        @media (min-width: 769px) { .modal-70 { width: 70%; } }
 
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
+
         @media (max-width: 768px) {
           .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
-          .calendar-body-grid, .calendar-header-grid { display: flex; flex-direction: column; gap: 0; }
-          .calendar-header-grid { display: none; }
-          .calendar-day-cell { min-height: auto; border-bottom: 1px solid #e5e7eb; }
-          .calendar-day-cell.empty { display: none; }
+          .responsive-table thead { display: none; }
+          .responsive-table tr {
+            display: flex; flex-direction: column; border: 1px solid #e5e7eb; border-radius: 12px;
+            margin-bottom: 16px; padding: 16px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+          }
+          .responsive-table td {
+            display: flex; justify-content: space-between; alignItems: center; padding: 10px 0;
+            border-bottom: 1px solid #f1f5f9; text-align: right; white-space: normal !important;
+          }
+          .responsive-table td:last-child { border-bottom: none; padding-bottom: 0; }
+          .responsive-table td::before {
+            content: attr(data-label); font-weight: 700; color: #6b7280; font-size: 0.75rem;
+            text-transform: uppercase; letter-spacing: 0.5px;
+          }
+          .mobile-client-cell { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
         }
       `}</style>
 
-      {/* HEADER */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={onOpenMenu} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }} className="mobile-menu-btn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-          </button>
-          <div>
-            <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#111827', fontWeight: 700 }}>Calendar</h1>
-            <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>Schedule & Planning</p>
+      {/* DASHBOARD HEADER */}
+      <header className="main-header dashboard-header-container">
+        <div className="header-titles">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Open menu">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
+            <h1 style={{ margin: 0, color: '#111827', fontSize: '1.8rem', fontWeight: 700 }}>Dashboard</h1>
           </div>
+          <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>General operations overview</p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'white', padding: '6px 12px', borderRadius: '24px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-          <button onClick={prevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronLeft size={20}/></button>
-          <span style={{ fontWeight: 700, color: '#1e293b', minWidth: '130px', textAlign: 'center', textTransform: 'capitalize' }}>{monthName}</span>
-          <button onClick={nextMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronRight size={20}/></button>
+        <div className="dashboard-actions-wrapper">
+          <div className="search-box-container" style={{ display: 'flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '0 16px', height: '42px', flex: 1, minWidth: '200px' }}>
+            <Search size={16} color="#9ca3af" />
+            <input type="text" placeholder="Search job..." style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', padding: '10px', fontSize: '0.9rem', width: '100%', color: '#111827' }} />
+          </div>
+          <button className="bell-btn-mobile" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6b7280', flexShrink: 0 }}>
+            <Bell size={18} />
+          </button>
+          <button className="add-btn-mobile" onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0 }}>
+            <Plus size={16} /> New Job
+          </button>
         </div>
       </header>
 
-      {/* CALENDAR GRID */}
-      {isLoading ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>Loading calendar data...</div>
-      ) : (
-        <div className="calendar-wrapper">
-          <div className="calendar-header-grid">
-            {weekDays.map(day => <div key={day} className="calendar-header-cell">{day}</div>)}
-          </div>
-          <div className="calendar-body-grid">
-            {calendarDays.map((date, index) => {
-              if (!date) return <div key={`empty-${index}`} className="calendar-day-cell empty"></div>;
-              
-              const offset = date.getTimezoneOffset()
-              const localDate = new Date(date.getTime() - (offset*60*1000))
-              const dateString = localDate.toISOString().split('T')[0]
-              
-              const dailyJobs = propertiesList.filter(p => {
-                const jobDate = p.scheduleDate || p.receiveDate;
-                return jobDate === dateString;
-              });
-
-              return (
-                <div key={dateString} className="calendar-day-cell">
-                  <div className="calendar-date-number">
-                    <span>{date.getDate()}</span>
-                  </div>
-                  
-                  {dailyJobs.map(job => {
-                    const statusColor = getRelationColor(statuses, job.statusId) || '#cbd5e1';
-                    return (
-                      <div 
-                        key={job.id} 
-                        className="calendar-event"
-                        style={{ backgroundColor: `${statusColor}15`, color: '#1e293b', borderLeft: `3px solid ${statusColor}` }}
-                        onClick={() => { setSelectedHouse(job); setIsDetailModalOpen(true); }}
-                      >
-                        <span style={{ fontWeight: 700 }}>{job.timeIn || '--:--'}</span>
-                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden' }}>{job.client}</span>
-                      </div>
-                    )
-                  })}
+      {/* KPI CARDS */}
+      <div className="dash-grid">
+        {isLoading ? (
+          <div style={{ color: '#6b7280' }}>Loading metrics...</div>
+        ) : (
+          statuses.slice(0, 4).map((status, index) => {
+            const Icon = kpiIcons[index % kpiIcons.length];
+            const count = properties.filter(p => p.statusId === status.id || p.statusId === status.name).length;
+            return (
+              <div style={s.kpiCard} key={status.id}>
+                <div style={s.kpiIconBox(status.color)}><Icon size={22} /></div>
+                <div>
+                  <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>{status.name}</div>
+                  <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#111827', lineHeight: '1.2' }}>{count}</div>
                 </div>
-              );
-            })}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 2-COLUMN MAIN CONTENT */}
+      <div className="main-columns">
+
+        {/* LEFT COLUMN: DAILY JOBS */}
+        <div className="left-col">
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'visible' }}>
+            <div style={s.tableHeader}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Daily Jobs</h2>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
+              </div>
+
+              <div className="dashboard-filters">
+                <button onClick={() => setActiveFilter('All')} style={s.pillBtn(activeFilter === 'All')}>All</button>
+                {statuses.map(st => (
+                  <button key={st.id} onClick={() => setActiveFilter(st.name)} style={s.pillBtn(activeFilter === st.name)}>
+                    {st.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* RESPONSIVE TABLE WITH INLINE STATUS CHANGE */}
+            <div style={{ overflowX: 'auto', padding: '10px 20px 40px 20px', minHeight: '300px' }}>
+              <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{...s.th, width: '100px'}}>Actions</th>
+                    <th style={s.th}>Client</th>
+                    <th style={s.th}>Time</th>
+                    <th style={s.th}>Type</th>
+                    <th style={s.th}>Team</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr><td colSpan={6} style={{textAlign: 'center', padding: '40px', color: '#6b7280'}}>Loading database...</td></tr>
+                  ) : filteredProperties.length === 0 ? (
+                    <tr><td colSpan={6} style={{textAlign: 'center', padding: '40px', color: '#6b7280', fontStyle: 'italic'}}>No jobs to display.</td></tr>
+                  ) : filteredProperties.map((prop) => {
+                    const teamName = getRelationName(teams, prop.teamId, 'Unassigned');
+                    const serviceName = getRelationName(services, prop.serviceId, 'Regular');
+
+                    return (
+                      <tr
+                        key={prop.id}
+                        onClick={() => handleOpenDetail(prop)}
+                        style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
+                      >
+                        <td data-label="Actions" style={s.td}>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleOpenForm(prop); }}
+                              style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px', display: 'flex' }}
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setSelectedHouse(prop); handleDelete(); }}
+                              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px', display: 'flex' }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                        <td data-label="Client" style={s.td}>
+                          <div className="mobile-client-cell">
+                            <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{prop.client}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <MapPin size={12} /> {prop.address}
+                            </div>
+                          </div>
+                        </td>
+                        <td data-label="Time" style={{ ...s.td, color: '#6b7280' }}><Clock size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} /> {prop.timeIn || '08:00 AM'}</td>
+                        <td data-label="Type" style={{ ...s.td, fontWeight: 500 }}>{serviceName}</td>
+                        <td data-label="Team" style={{ ...s.td, color: '#6b7280' }}>{teamName}</td>
+                        
+                        <td data-label="Status" style={{ ...s.td, textAlign: 'right' }}>
+                          <StatusPillSelector 
+                            currentStatusId={prop.statusId} 
+                            statuses={statuses} 
+                            onChange={(newId) => handleQuickStatusChange(prop.id, newId)} 
+                            disabled={isSaving} 
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* --- FORM MODAL --- */}
+        {/* RIGHT COLUMN: ACTIVE TEAMS */}
+        <div className="right-col">
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', padding: '20px' }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Active Teams</h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {isLoading ? (
+                <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Loading teams...</div>
+              ) : teams.length === 0 ? (
+                <div style={{ color: '#6b7280', fontSize: '0.9rem', fontStyle: 'italic' }}>No configured teams.</div>
+              ) : (
+                teams.map(team => {
+                  const assignedProps = properties.filter(p => p.teamId === team.id || p.teamId === team.name);
+                  
+                  return (
+                    <div key={team.id} style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: `${team.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: team.color }}>
+                            <Users size={18} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{team.name}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                              {assignedProps.length > 0 ? `${assignedProps.length} jobs today` : 'Free'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ width: '100%', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', marginTop: '12px' }}>
+                        <div style={{ width: assignedProps.length > 0 ? '100%' : '0%', height: '100%', backgroundColor: team.color, borderRadius: '2px', transition: 'width 0.3s ease' }}></div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* --- FORM MODAL (3 COLUMN GRID) --- */}
       {isFormModalOpen && (
-        <div style={s.overlayCentered} onClick={handleCloseForm}>
-          <div style={s.modal70} onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay-centered" onClick={handleCloseForm}>
+          <div className="modal-70" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>{selectedHouse ? 'Edit Property Details' : 'Register New Property'}</h3>
               <button style={s.closeBtn} onClick={handleCloseForm}><X size={24} /></button>
@@ -491,10 +742,10 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
         </div>
       )}
 
-      {/* --- DETAIL MODAL --- */}
+      {/* --- DETAIL MODAL WITH PHOTOS & DUPLICATE --- */}
       {isDetailModalOpen && selectedHouse && (
-        <div style={s.overlayCentered} onClick={() => setIsDetailModalOpen(false)}>
-          <div style={s.modal70} onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
+          <div className="modal-70" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
               <button style={s.closeBtn} onClick={() => setIsDetailModalOpen(false)}><X size={24} /></button>
@@ -512,9 +763,13 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
 
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    <span style={{ backgroundColor: getRelationColor(statuses, selectedHouse.statusId) || '#ccc', width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
-                    <span style={s.detailValue}>{getRelationName(statuses, selectedHouse.statusId, 'UNASSIGNED')}</span>
+                  <div style={{ marginTop: '4px' }}>
+                    <StatusPillSelector 
+                      currentStatusId={selectedHouse.statusId} 
+                      statuses={statuses} 
+                      onChange={(newId: string) => handleQuickStatusChange(selectedHouse.id, newId)} 
+                      disabled={isSaving} 
+                    />
                   </div>
                 </div>
                 <div style={s.detailItem}>
@@ -571,6 +826,49 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
                   </div>
                 </div>
 
+                {/* --- 1. NEW PHOTO SECTIONS --- */}
+                <div className="col-span-full" style={{ marginTop: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    
+                    {/* Before Photos */}
+                    <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <span style={s.detailLabel}><ImageIcon size={14} /> BEFORE PHOTOS</span>
+                        <button onClick={() => beforeInputRef.current?.click()} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
+                        <input type="file" multiple accept="image/*" ref={beforeInputRef} style={{ display: 'none' }} onChange={(e) => handlePhotoUpload(e, 'before')} />
+                      </div>
+                      {beforePhotos.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos uploaded</div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
+                          {beforePhotos.map((url, i) => (
+                            <img key={i} src={url} alt={`Before ${i}`} style={{ height: '80px', width: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* After Photos */}
+                    <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <span style={s.detailLabel}><ImageIcon size={14} /> AFTER PHOTOS</span>
+                        <button onClick={() => afterInputRef.current?.click()} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
+                        <input type="file" multiple accept="image/*" ref={afterInputRef} style={{ display: 'none' }} onChange={(e) => handlePhotoUpload(e, 'after')} />
+                      </div>
+                      {afterPhotos.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos uploaded</div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
+                          {afterPhotos.map((url, i) => (
+                            <img key={i} src={url} alt={`After ${i}`} style={{ height: '80px', width: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+
                 <div className="col-span-full">
                   <div style={s.noteBoxGray}>
                     <span style={{ ...s.detailLabel, marginBottom: '8px' }}><StickyNote size={14} /> GENERAL NOTE</span>
@@ -589,9 +887,20 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
             </div>
 
             <footer style={s.footerBetween}>
-              <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}>
-                <Trash2 size={16} style={{ marginRight: '6px' }} /> {isSaving ? 'Deleting...' : 'Delete Property'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}>
+                  <Trash2 size={16} style={{ marginRight: '6px' }} /> {isSaving ? 'Deleting...' : 'Delete Property'}
+                </button>
+                
+                {/* 2. DUPLICATE BUTTON */}
+                <button 
+                  onClick={handleDuplicate}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  <Copy size={16} /> Duplicate Job
+                </button>
+              </div>
+
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
                 
