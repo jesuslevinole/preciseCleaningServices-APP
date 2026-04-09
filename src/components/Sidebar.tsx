@@ -1,14 +1,16 @@
 import { 
   Building2, Home, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen, Users, CalendarDays,
-  FileText, CheckCircle, ClipboardCheck, Map, DollarSign 
+  FileText, CheckCircle, ClipboardCheck, Map, DollarSign, ShieldCheck, UserPlus 
 } from 'lucide-react';
 
-// Interfaz para asegurar que TypeScript reconozca todas nuestras nuevas pestañas
+// CORRECCIÓN: Tipos actualizados para incluir los nuevos módulos de administración
+type TabOptions = 'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'qc_route' | 'payroll' | 'customers' | 'settings' | 'roles' | 'users';
+
 interface SidebarProps {
   isSidebarOpen: boolean;
   setIsSidebarOpen: (isOpen: boolean) => void;
-  activeTab: 'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'qc_route' | 'payroll' | 'customers' | 'settings';
-  setActiveTab: (tab: 'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'qc_route' | 'payroll' | 'customers' | 'settings') => void;
+  activeTab: TabOptions;
+  setActiveTab: (tab: TabOptions) => void;
   onSettingsClick: () => void;
 }
 
@@ -37,7 +39,6 @@ export default function Sidebar({
 
       {isSidebarOpen && <div className="menu-label">MENU</div>}
       
-      {/* Contenedor de navegación principal */}
       <nav className="sidebar-nav">
         
         <button className={`nav-item ${activeTab === 'houses' ? 'active' : ''}`} onClick={() => setActiveTab('houses')}>
@@ -78,6 +79,19 @@ export default function Sidebar({
         <button className={`nav-item ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}>
           <Users size={20} className="nav-icon" />
           {isSidebarOpen && <span className="nav-text">Customers</span>}
+        </button>
+
+        {/* NUEVA SECCIÓN: ADMINISTRACIÓN */}
+        {isSidebarOpen && <div className="menu-label" style={{ marginTop: '20px' }}>ADMIN</div>}
+
+        <button className={`nav-item ${activeTab === 'roles' ? 'active' : ''}`} onClick={() => setActiveTab('roles')}>
+          <ShieldCheck size={20} className="nav-icon" />
+          {isSidebarOpen && <span className="nav-text">Roles & Permissions</span>}
+        </button>
+
+        <button className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
+          <UserPlus size={20} className="nav-icon" />
+          {isSidebarOpen && <span className="nav-text">System Users</span>}
         </button>
         
         <button className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={onSettingsClick}>
