@@ -3,7 +3,7 @@ import { Plus, Edit2, Trash2, X, User, Mail, Phone, ShieldCheck, Search } from '
 import type { SystemUser, Role } from '../../types/index';
 import { usersService } from '../../services/usersService';
 
-// --- CUSTOM SELECTOR CORREGIDO (Z-INDEX Y UX MEJORADOS) ---
+// --- CUSTOM SELECTOR ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const selected = options.find((o: any) => o.id === value);
@@ -75,12 +75,14 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
   );
 };
 
-export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
+// --- CORRECCIÓN: Agregamos roles como propiedad (Prop) ---
+interface UsersViewProps {
+  onOpenMenu: () => void;
+  roles: Role[];
+}
+
+export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
   const [users, setUsers] = useState<SystemUser[]>([]);
-  const [roles] = useState<Role[]>([
-    { id: 'r1', name: 'Administrator', description: '', permissions: [] },
-    { id: 'r2', name: 'Employee', description: '', permissions: [] }
-  ]);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -93,7 +95,6 @@ export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
     setIsModalOpen(true);
   };
 
-  // --- FUNCIÓN HANDLESAVE CORREGIDA Y ROBUSTA ---
   const handleSave = async () => {
     if (!formData.email || !formData.roleId) {
       return alert("Please fill in Email and Role.");
@@ -104,11 +105,9 @@ export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
 
     try {
       if (formData.id) {
-        // Lógica de actualización
         setUsers(users.map(u => u.id === formData.id ? formData : u));
         setIsModalOpen(false);
       } else {
-        // --- FLUJO DE INVITACIÓN REAL A FIREBASE ---
         const newUserId = await usersService.inviteUser({
           firstName: formData.firstName,
           lastName: formData.lastName,
@@ -134,7 +133,6 @@ export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
         alert("❌ Error: Could not send invitation. Please check the console.");
       }
     } finally {
-      // Desbloqueo garantizado del botón
       setIsSaving(false);
     }
   };

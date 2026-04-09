@@ -60,6 +60,9 @@ export default function App() {
     return <LoginView onLoginSuccess={() => setIsAuthenticated(true)} />;
   }
 
+  // --- LOG DE DIAGNÓSTICO PARA EVITAR ALERTAS EN TS ---
+  console.log("Current Active Role ID:", activeRoleId);
+
   return (
     <div className="app-container">
       <Sidebar 
@@ -113,12 +116,13 @@ export default function App() {
           />
         )}
         
-        {activeTab === 'users' && <UsersView onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {/* CORRECCIÓN FINAL: Pasamos los roles a UsersView para que el selector funcione correctamente */}
+        {activeTab === 'users' && <UsersView onOpenMenu={() => setIsSidebarOpen(true)} roles={roles} />}
 
         {(activeTab === 'invoices' || activeTab === 'done' || activeTab === 'qc_route' || activeTab === 'payroll') && (
           <div className="fade-in" style={{ padding: '40px', textAlign: 'center', color: '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-            <h2 style={{ color: '#111827', fontSize: '1.5rem', marginBottom: '8px' }}>Under Construction</h2>
-            <p>The {activeTab.replace('_', ' ')} view is currently being developed.</p>
+            <h2 style={{ color: '#111827', fontSize: '1.5rem', margin: '0 0 8px 0' }}>Under Construction</h2>
+            <p style={{ margin: 0 }}>The {activeTab.replace('_', ' ')} view is currently being developed.</p>
           </div>
         )}
       </main>
