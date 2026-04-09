@@ -3,11 +3,9 @@ import { Plus, Edit2, Trash2, X, User, Mail, Phone, ShieldCheck, Search } from '
 import type { SystemUser, Role } from '../../types/index';
 import { usersService } from '../../services/usersService';
 
-// --- CUSTOM SELECTOR CORREGIDO ---
+// --- CUSTOM SELECTOR CORREGIDO (Z-INDEX Y UX MEJORADOS) ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  
-  // Buscamos el rol seleccionado para mostrar su nombre
   const selected = options.find((o: any) => o.id === value);
 
   return (
@@ -54,30 +52,23 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
           maxHeight: '200px',
           overflowY: 'auto'
         }}>
-          {options.length === 0 ? (
-            <div style={{ padding: '12px', color: '#94a3b8', fontSize: '0.9rem' }}>No roles found</div>
-          ) : (
-            options.map((o: any) => (
-              <div 
-                key={o.id} 
-                onClick={() => { 
-                  onChange(o.id); 
-                  setIsOpen(false); 
-                }} 
-                style={{ 
-                  padding: '12px 14px', 
-                  cursor: 'pointer', 
-                  borderBottom: '1px solid #f8fafc', 
-                  color: '#0f172a',
-                  backgroundColor: value === o.id ? '#f1f5f9' : 'transparent'
-                }} 
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} 
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = value === o.id ? '#f1f5f9' : 'transparent'}
-              >
-                {o.name}
-              </div>
-            ))
-          )}
+          {options.map((o: any) => (
+            <div 
+              key={o.id} 
+              onClick={() => { onChange(o.id); setIsOpen(false); }} 
+              style={{ 
+                padding: '12px 14px', 
+                cursor: 'pointer', 
+                borderBottom: '1px solid #f8fafc', 
+                color: '#0f172a',
+                backgroundColor: value === o.id ? '#f1f5f9' : 'transparent'
+              }} 
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} 
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = value === o.id ? '#f1f5f9' : 'transparent'}
+            >
+              {o.name}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -86,8 +77,6 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
 
 export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
   const [users, setUsers] = useState<SystemUser[]>([]);
-  
-  // Estos son los roles disponibles para el selector
   const [roles] = useState<Role[]>([
     { id: 'r1', name: 'Administrator', description: '', permissions: [] },
     { id: 'r2', name: 'Employee', description: '', permissions: [] }
@@ -104,31 +93,48 @@ export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
     setIsModalOpen(true);
   };
 
+  // --- FUNCIÓN HANDLESAVE CORREGIDA Y ROBUSTA ---
   const handleSave = async () => {
-    if (!formData.email || !formData.roleId) return alert("Email and Role are required.");
+    if (!formData.email || !formData.roleId) {
+      return alert("Please fill in Email and Role.");
+    }
     
     setIsSaving(true);
+    console.log("Iniciando invitación para:", formData.email);
+
     try {
       if (formData.id) {
+        // Lógica de actualización
         setUsers(users.map(u => u.id === formData.id ? formData : u));
+        setIsModalOpen(false);
       } else {
-        await usersService.inviteUser({
+        // --- FLUJO DE INVITACIÓN REAL A FIREBASE ---
+        const newUserId = await usersService.inviteUser({
           firstName: formData.firstName,
           lastName: formData.lastName,
-          email: formData.email,
+          email: formData.email.toLowerCase().trim(),
           phone: formData.phone,
-          altPhone: formData.altPhone,
+          altPhone: formData.altPhone || '',
           roleId: formData.roleId,
           status: 'Pending Invite'
         });
         
-        setUsers([...users, { ...formData, id: Date.now().toString() }]);
-        alert(`Success! Invitation sent to ${formData.email}.`);
+        console.log("Usuario invitado con ID:", newUserId);
+
+        setUsers(prev => [...prev, { ...formData, id: newUserId, status: 'Pending Invite' }]);
+        alert(`✅ Success! Invitation sent to ${formData.email}.`);
+        setIsModalOpen(false);
       }
-      setIsModalOpen(false);
-    } catch (error) {
-      alert("Error processing user invitation.");
+    } catch (error: any) {
+      console.error("Error completo al guardar:", error);
+      
+      if (error.code === 'permission-denied') {
+        alert("❌ Firebase Error: Access Denied. Check your Firestore Rules.");
+      } else {
+        alert("❌ Error: Could not send invitation. Please check the console.");
+      }
     } finally {
+      // Desbloqueo garantizado del botón
       setIsSaving(false);
     }
   };
@@ -150,7 +156,7 @@ export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
           </button>
           <div>
             <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#111827', fontWeight: 700 }}>System Users</h1>
-            <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>Authorized users whitelist</p>
+            <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>Whitelist of authorized users</p>
           </div>
         </div>
         <button onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer' }}>
@@ -171,7 +177,7 @@ export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
           </thead>
           <tbody>
             {users.length === 0 ? (
-               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No users registered.</td></tr>
+               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No users found.</td></tr>
             ) : users.map(user => (
               <tr key={user.id}>
                 <td style={{ ...s.td, fontWeight: 600 }}>{user.firstName} {user.lastName}</td>
@@ -230,7 +236,6 @@ export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
                 </div>
                 <div>
                   <label style={s.label}>Assign Role *</label>
-                  {/* AQUÍ ESTÁ EL SELECTOR CORREGIDO */}
                   <CustomSelect 
                     options={roles} 
                     value={formData.roleId} 
