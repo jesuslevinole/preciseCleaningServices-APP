@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, X, ShieldAlert, CheckSquare } from 'lucide-react';
 import type { Role, Permission } from '../../types/index';
+import { settingsService } from '../../services/settingsService'; // Importamos el servicio
 
-// CORRECCIÓN: Definimos que esta vista ahora recibe roles y setRoles desde el padre (App.tsx)
 interface RolesViewProps {
   onOpenMenu: () => void;
   roles: Role[];
@@ -11,9 +11,29 @@ interface RolesViewProps {
 
 export default function RolesView({ onOpenMenu, roles, setRoles }: RolesViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState<Role>({ id: '', name: '', description: '', permissions: [] });
 
   const defaultModules = ['Houses', 'Calendar', 'Invoices', 'Customers', 'Settings'];
+
+  // Cargar roles desde Firebase al iniciar
+  useEffect(() => {
+    const fetchRoles = async () => {
+      setIsLoading(true);
+      try {
+        const data = await settingsService.getAll('settings_roles');
+        if (data && data.length > 0) {
+          setRoles(data as Role[]);
+        }
+      } catch (error) {
+        console.error("Error cargando roles de Firebase:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchRoles();
+  }, [setRoles]);
 
   const handleOpenForm = (role?: Role) => {
     if (role) {
@@ -34,26 +54,46 @@ export default function RolesView({ onOpenMenu, roles, setRoles }: RolesViewProp
     }));
   };
 
-  const handleSaveRole = () => {
+  // Guardar en Firebase
+  const handleSaveRole = async () => {
     if (!formData.name) return alert("Role name is required");
     
-    if (formData.id) {
-      // Actualizamos el estado global en App.tsx
-      setRoles(roles.map(r => r.id === formData.id ? formData : r));
-    } else {
-      // Creamos un nuevo rol en el estado global
-      setRoles([...roles, { ...formData, id: Date.now().toString() }]);
+    setIsSaving(true);
+    try {
+      if (formData.id) {
+        const { id, ...dataToUpdate } = formData;
+        await settingsService.update('settings_roles', formData.id, dataToUpdate);
+        setRoles(roles.map(r => r.id === formData.id ? formData : r));
+      } else {
+        const { id, ...dataToAdd } = formData;
+        const newId = await settingsService.create('settings_roles', dataToAdd);
+        setRoles([...roles, { ...formData, id: newId }]);
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Error guardando rol en Firebase:", error);
+      alert("Hubo un error al guardar el rol.");
+    } finally {
+      setIsSaving(false);
     }
-    setIsModalOpen(false);
   };
 
-  const handleDeleteRole = (id: string) => {
+  // Eliminar de Firebase
+  const handleDeleteRole = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this role?")) {
-      setRoles(roles.filter(r => r.id !== id));
+      setIsSaving(true);
+      try {
+        await settingsService.delete('settings_roles', id);
+        setRoles(roles.filter(r => r.id !== id));
+      } catch (error) {
+        console.error("Error eliminando rol en Firebase:", error);
+        alert("Hubo un error al eliminar el rol.");
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
-  // --- ESTILOS ---
   const s = {
     th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, borderBottom: '1px solid #f1f5f9' },
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#0f172a' },
@@ -75,7 +115,7 @@ export default function RolesView({ onOpenMenu, roles, setRoles }: RolesViewProp
             <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>Configure the access simulation</p>
           </div>
         </div>
-        <button onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={() => handleOpenForm()} disabled={isLoading} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '20px', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer' }}>
           <Plus size={18} /> Create New Role
         </button>
       </header>
@@ -90,13 +130,17 @@ export default function RolesView({ onOpenMenu, roles, setRoles }: RolesViewProp
             </tr>
           </thead>
           <tbody>
-            {roles.map(role => (
+            {isLoading ? (
+               <tr><td colSpan={3} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading roles...</td></tr>
+            ) : roles.length === 0 ? (
+               <tr><td colSpan={3} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No roles configured.</td></tr>
+            ) : roles.map(role => (
               <tr key={role.id}>
                 <td style={{ ...s.td, fontWeight: 600, color: '#2563eb' }}><ShieldAlert size={14} style={{ display: 'inline', marginRight: '8px' }}/> {role.name}</td>
                 <td style={{ ...s.td, color: '#64748b' }}>{role.description}</td>
                 <td style={{ ...s.td, textAlign: 'right' }}>
-                  <button onClick={() => handleOpenForm(role)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '8px' }}><Edit2 size={18} /></button>
-                  <button onClick={() => handleDeleteRole(role.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '8px', marginLeft: '8px' }}><Trash2 size={18} /></button>
+                  <button onClick={() => handleOpenForm(role)} disabled={isSaving} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '8px' }}><Edit2 size={18} /></button>
+                  <button onClick={() => handleDeleteRole(role.id)} disabled={isSaving} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '8px', marginLeft: '8px' }}><Trash2 size={18} /></button>
                 </td>
               </tr>
             ))}
@@ -160,8 +204,8 @@ export default function RolesView({ onOpenMenu, roles, setRoles }: RolesViewProp
 
             <footer style={{ padding: '20px 24px', borderTop: '1px solid #f1f5f9', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: '12px', borderRadius: '0 0 16px 16px' }}>
               <button type="button" onClick={() => setIsModalOpen(false)} style={s.btnCancel}>Cancel</button>
-              <button onClick={handleSaveRole} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#2563eb', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
-                <CheckSquare size={18}/> Save Configuration
+              <button onClick={handleSaveRole} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#2563eb', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: 600, cursor: isSaving ? 'wait' : 'pointer', opacity: isSaving ? 0.7 : 1 }}>
+                <CheckSquare size={18}/> {isSaving ? 'Saving...' : 'Save Configuration'}
               </button>
             </footer>
           </div>

@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { Plus, Edit2, Trash2, X, User, Mail, Phone, ShieldCheck, Search } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Trash2, X, User, Mail, Phone, ShieldCheck, Search } from 'lucide-react'; // Edit2 eliminado
 import type { SystemUser, Role } from '../../types/index';
 import { usersService } from '../../services/usersService';
+import { db } from '../../config/firebase';
+import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
 
-// --- CUSTOM SELECTOR ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const selected = options.find((o: any) => o.id === value);
@@ -16,56 +17,16 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
     >
       <div 
         onClick={() => setIsOpen(!isOpen)} 
-        style={{ 
-          backgroundColor: '#ffffff', 
-          padding: '12px 14px 12px 40px', 
-          border: '1px solid #cbd5e1', 
-          borderRadius: '8px', 
-          fontSize: '0.95rem', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between', 
-          cursor: 'pointer', 
-          color: '#0f172a',
-          minHeight: '45px'
-        }}
+        style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: '#0f172a', minHeight: '45px' }}
       >
         <Icon size={16} color="#64748b" style={{ position: 'absolute', left: '14px' }} />
-        <span style={{ color: selected ? '#0f172a' : '#94a3b8' }}>
-          {selected ? selected.name : placeholder}
-        </span>
+        <span style={{ color: selected ? '#0f172a' : '#94a3b8' }}>{selected ? selected.name : placeholder}</span>
         <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{isOpen ? '▲' : '▼'}</span>
       </div>
-
       {isOpen && (
-        <div style={{ 
-          position: 'absolute', 
-          top: '105%', 
-          left: 0, 
-          width: '100%', 
-          background: 'white', 
-          border: '1px solid #e5e7eb', 
-          borderRadius: '8px', 
-          zIndex: 9999, 
-          marginTop: '4px', 
-          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
-          maxHeight: '200px',
-          overflowY: 'auto'
-        }}>
+        <div style={{ position: 'absolute', top: '105%', left: 0, width: '100%', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', zIndex: 9999, marginTop: '4px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', maxHeight: '200px', overflowY: 'auto' }}>
           {options.map((o: any) => (
-            <div 
-              key={o.id} 
-              onClick={() => { onChange(o.id); setIsOpen(false); }} 
-              style={{ 
-                padding: '12px 14px', 
-                cursor: 'pointer', 
-                borderBottom: '1px solid #f8fafc', 
-                color: '#0f172a',
-                backgroundColor: value === o.id ? '#f1f5f9' : 'transparent'
-              }} 
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} 
-              onMouseLeave={e => e.currentTarget.style.backgroundColor = value === o.id ? '#f1f5f9' : 'transparent'}
-            >
+            <div key={o.id} onClick={() => { onChange(o.id); setIsOpen(false); }} style={{ padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid #f8fafc', color: '#0f172a', backgroundColor: value === o.id ? '#f1f5f9' : 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.backgroundColor = value === o.id ? '#f1f5f9' : 'transparent'}>
               {o.name}
             </div>
           ))}
@@ -75,7 +36,6 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
   );
 };
 
-// --- CORRECCIÓN: Agregamos roles como propiedad (Prop) ---
 interface UsersViewProps {
   onOpenMenu: () => void;
   roles: Role[];
@@ -83,12 +43,30 @@ interface UsersViewProps {
 
 export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
   const [users, setUsers] = useState<SystemUser[]>([]);
-  
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState<SystemUser>({ 
-    id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' 
-  });
+  const [formData, setFormData] = useState<SystemUser>({ id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' });
+
+  // Cargar usuarios de Firebase al iniciar
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setIsLoading(true);
+      try {
+        const querySnapshot = await getDocs(collection(db, 'system_users'));
+        const usersList: SystemUser[] = [];
+        querySnapshot.forEach((doc) => {
+          usersList.push({ id: doc.id, ...doc.data() } as SystemUser);
+        });
+        setUsers(usersList);
+      } catch (error) {
+        console.error("Error cargando usuarios:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   const handleOpenForm = (user?: SystemUser) => {
     setFormData(user || { id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' });
@@ -96,16 +74,13 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
   };
 
   const handleSave = async () => {
-    if (!formData.email || !formData.roleId) {
-      return alert("Please fill in Email and Role.");
-    }
+    if (!formData.email || !formData.roleId) return alert("Please fill in Email and Role.");
     
     setIsSaving(true);
-    console.log("Iniciando invitación para:", formData.email);
-
     try {
       if (formData.id) {
-        setUsers(users.map(u => u.id === formData.id ? formData : u));
+        // En una futura mejora: crear lógica de updateUser en usersService
+        alert("Editing users directly is restricted. Please delete and re-invite if needed.");
         setIsModalOpen(false);
       } else {
         const newUserId = await usersService.inviteUser({
@@ -117,23 +92,32 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
           roleId: formData.roleId,
           status: 'Pending Invite'
         });
-        
-        console.log("Usuario invitado con ID:", newUserId);
-
         setUsers(prev => [...prev, { ...formData, id: newUserId, status: 'Pending Invite' }]);
         alert(`✅ Success! Invitation sent to ${formData.email}.`);
         setIsModalOpen(false);
       }
     } catch (error: any) {
       console.error("Error completo al guardar:", error);
-      
-      if (error.code === 'permission-denied') {
-        alert("❌ Firebase Error: Access Denied. Check your Firestore Rules.");
-      } else {
-        alert("❌ Error: Could not send invitation. Please check the console.");
-      }
+      if (error.code === 'permission-denied') alert("❌ Firebase Error: Access Denied. Check your Firestore Rules.");
+      else alert("❌ Error: Could not send invitation. Please check the console.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Eliminar usuario
+  const handleDeleteUser = async (id: string) => {
+    if(window.confirm("Are you sure you want to remove this user's access?")) {
+      setIsSaving(true);
+      try {
+        await deleteDoc(doc(db, 'system_users', id));
+        setUsers(users.filter(u => u.id !== id));
+      } catch (error) {
+        console.error("Error al borrar usuario:", error);
+        alert("Hubo un problema al borrar el usuario.");
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -157,7 +141,7 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
             <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>Whitelist of authorized users</p>
           </div>
         </div>
-        <button onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={() => handleOpenForm()} disabled={isLoading} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '20px', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer' }}>
           <Plus size={18} /> Invite New User
         </button>
       </header>
@@ -174,7 +158,9 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
             </tr>
           </thead>
           <tbody>
-            {users.length === 0 ? (
+            {isLoading ? (
+               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading users...</td></tr>
+            ) : users.length === 0 ? (
                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No users found.</td></tr>
             ) : users.map(user => (
               <tr key={user.id}>
@@ -185,8 +171,7 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
                   <span style={{ color: user.status === 'Active' ? '#10b981' : '#f59e0b', fontWeight: 600, fontSize: '0.85rem' }}>{user.status}</span>
                 </td>
                 <td style={{ ...s.td, textAlign: 'right' }}>
-                  <button onClick={() => handleOpenForm(user)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '8px' }}><Edit2 size={18} /></button>
-                  <button style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '8px', marginLeft: '8px' }}><Trash2 size={18} /></button>
+                  <button onClick={() => handleDeleteUser(user.id)} disabled={isSaving} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '8px', marginLeft: '8px' }}><Trash2 size={18} /></button>
                 </td>
               </tr>
             ))}
@@ -234,13 +219,7 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
                 </div>
                 <div>
                   <label style={s.label}>Assign Role *</label>
-                  <CustomSelect 
-                    options={roles} 
-                    value={formData.roleId} 
-                    onChange={(val: string) => setFormData({...formData, roleId: val})} 
-                    placeholder="Select a role..." 
-                    icon={ShieldCheck} 
-                  />
+                  <CustomSelect options={roles} value={formData.roleId} onChange={(val: string) => setFormData({...formData, roleId: val})} placeholder="Select a role..." icon={ShieldCheck} />
                 </div>
               </div>
             </div>
