@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { Mail, Lock, LogIn, ArrowRight } from 'lucide-react';
+import { Mail, Lock, LogIn, ArrowRight, ShieldAlert } from 'lucide-react';
 
-export default function LoginView() {
+interface LoginViewProps {
+  onLoginSuccess: () => void;
+}
+
+export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -10,14 +14,16 @@ export default function LoginView() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Lógica de Firebase Auth aquí
-    setTimeout(() => setIsLoading(false), 1500);
+    // Simulación de Auth
+    setTimeout(() => {
+      setIsLoading(false);
+      onLoginSuccess();
+    }, 1500);
   };
 
   const handleResetPassword = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Lógica de reset de Firebase aquí
     setTimeout(() => {
       setIsLoading(false);
       alert("Password reset link sent to your email.");
@@ -26,7 +32,7 @@ export default function LoginView() {
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#f8fafc', padding: '20px', fontFamily: 'inherit' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#f8fafc', padding: '20px', fontFamily: 'inherit', width: '100%' }}>
       <div style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0, 0, 0, 0.05)', padding: '40px 30px', border: '1px solid #e5e7eb' }}>
         
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
@@ -79,6 +85,17 @@ export default function LoginView() {
             <button type="submit" disabled={isLoading} style={{ width: '100%', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', padding: '14px', borderRadius: '8px', fontWeight: 600, fontSize: '0.95rem', cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'background-color 0.2s', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: isLoading ? 0.8 : 1 }}>
               {isLoading ? 'Authenticating...' : 'Sign In'} <ArrowRight size={18} />
             </button>
+            
+            {/* BOTÓN TEMPORAL DEV/ADMIN BYPASS */}
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #cbd5e1' }}>
+              <button 
+                type="button" 
+                onClick={onLoginSuccess} 
+                style={{ width: '100%', backgroundColor: 'transparent', color: '#0f172a', border: '1px solid #94a3b8', padding: '12px', borderRadius: '8px', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              >
+                <ShieldAlert size={16} color="#f59e0b" /> Enter as Admin (Dev Mode)
+              </button>
+            </div>
           </form>
         ) : (
           <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

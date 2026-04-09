@@ -4,8 +4,12 @@ import HousesView from './views/HousesView';
 import CustomersView from './views/CustomersView';
 import SettingsView from './views/SettingsView';
 import CalendarView from './views/CalendarView';
-import QualityCheckView from './views/QualityCheckView'; // <-- 1. Importamos la nueva vista
-import type { Property } from './types';
+import QualityCheckView from './views/QualityCheckView';
+import LoginView from './views/auth/LoginView';
+import RolesView from './views/admin/RolesView';
+import UsersView from './views/admin/UsersView';
+
+import type { Property } from './types/index';
 import './App.css';
 
 const initialProperties: Property[] = [
@@ -14,13 +18,14 @@ const initialProperties: Property[] = [
   { id: '3', address: '3402 S W S Young Dr, Killeen, TX', city: 'Killeen', rooms: '4', bathrooms: '2', size: 'Heavy', description: 'Linnemann. Heavy Clean.', tag: { text: 'PREPAID', type: 'prepaid' }, borderColorClass: 'border-red', bottomNote: '*PREPAID Mia*', statusId: '2', invoiceStatus: 'Pending', receiveDate: '2026-03-10', scheduleDate: '', client: 'Linnemann', note: 'Key under the mat', employeeNote: '', serviceId: 's2', priorityId: '1', teamId: '', timeIn: '', timeOut: '' }
 ];
 
+type TabOptions = 'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'qc_route' | 'payroll' | 'customers' | 'settings' | 'roles' | 'users';
+
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'qc_route' | 'payroll' | 'customers' | 'settings'>('houses');
+  const [activeTab, setActiveTab] = useState<TabOptions>('houses');
   const [currentSettingView, setCurrentSettingView] = useState<string>('menu');
   const [properties, setProperties] = useState<Property[]>(initialProperties);
-
-  // NUEVO: Estado para saber qué casa se va a inspeccionar cuando le den al botón "Check"
   const [houseToInspect, setHouseToInspect] = useState<Property | null>(null);
 
   const handleSettingsClick = () => {
@@ -28,54 +33,45 @@ export default function App() {
     setCurrentSettingView('menu');
   }; 
 
-  // Función que se dispara desde HousesView para abrir el Quality Check
   const handleCheckHouse = (house: Property) => {
     setHouseToInspect(house);
     setActiveTab('qc_report');
   };
+
+  if (!isAuthenticated) {
+    return <LoginView onLoginSuccess={() => setIsAuthenticated(true)} />;
+  }
 
   return (
     <div className="app-container">
       <Sidebar 
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        activeTab={activeTab as any}
+        setActiveTab={setActiveTab as any} 
         onSettingsClick={handleSettingsClick}
       />
 
       <main className="main-content">
-        {activeTab === 'houses' && (
-          <HousesView 
-            properties={properties} 
-            setProperties={setProperties} 
-            onOpenMenu={() => setIsSidebarOpen(true)} 
-            onCheckHouse={handleCheckHouse} // Pasamos la función al componente
-          />
-        )}
+        {activeTab === 'houses' && <HousesView properties={properties} setProperties={setProperties} onOpenMenu={() => setIsSidebarOpen(true)} onCheckHouse={handleCheckHouse} />}
         
-        {activeTab === 'calendar' && <CalendarView properties={properties} onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {/* CORRECCIÓN APLICADA: properties={properties as any} */}
+        {activeTab === 'calendar' && <CalendarView properties={properties as any} onOpenMenu={() => setIsSidebarOpen(true)} />}
         
-        {/* NUEVO: Renderizamos la vista de Quality Check */}
         {activeTab === 'qc_report' && (
           <QualityCheckView 
-            properties={properties} 
+            properties={properties as any} 
             onOpenMenu={() => setIsSidebarOpen(true)} 
-            houseToInspect={houseToInspect}
-            clearHouseToInspect={() => setHouseToInspect(null)}
+            houseToInspect={houseToInspect as any} 
+            clearHouseToInspect={() => setHouseToInspect(null)} 
           />
         )}
 
         {activeTab === 'customers' && <CustomersView onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {activeTab === 'settings' && <SettingsView currentSettingView={currentSettingView} setCurrentSettingView={setCurrentSettingView} onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {activeTab === 'roles' && <RolesView onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {activeTab === 'users' && <UsersView onOpenMenu={() => setIsSidebarOpen(true)} />}
         
-        {activeTab === 'settings' && (
-          <SettingsView 
-            currentSettingView={currentSettingView}
-            setCurrentSettingView={setCurrentSettingView}
-            onOpenMenu={() => setIsSidebarOpen(true)}
-          />
-        )}
-
         {(activeTab === 'invoices' || activeTab === 'done' || activeTab === 'qc_route' || activeTab === 'payroll') && (
           <div className="fade-in" style={{ padding: '40px', textAlign: 'center', color: '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <h2 style={{ color: '#111827', fontSize: '1.5rem', marginBottom: '8px' }}>Under Construction</h2>

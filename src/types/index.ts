@@ -27,7 +27,7 @@ export interface SystemUser {
   email: string;
   phone: string;
   altPhone: string;
-  roleId: string; // Referencia al ID del Role
+  roleId: string;
   status: 'Active' | 'Pending Invite';
 }
 
@@ -52,13 +52,22 @@ export interface Property {
   bathrooms: string;
   note: string;
   employeeNote: string;
-  // Propiedades opcionales para la subida de imágenes
+  // Propiedades para la subida de imágenes
   beforePhotos?: string[];
   afterPhotos?: string[];
-  // Campos legacy o calculados
+  
+  // ==========================================
+  // Propiedades opcionales / Visuales (Legacy)
+  // ==========================================
   description?: string;
   city?: string;
   size?: string;
+  bottomNote?: string;
+  borderColorClass?: string;
+  tag?: {
+    text: string;
+    type: string;
+  };
 }
 
 // ==========================================
@@ -87,7 +96,7 @@ export interface Priority {
 export interface Service {
   id: string;
   name: string;
-  color?: string; // Opcional dependiendo de cómo lo manejes
+  color?: string; 
 }
 
 export interface Customer {

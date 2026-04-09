@@ -4,7 +4,8 @@ import {
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
   Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy
 } from 'lucide-react';
-import type { Property, Status, Team, Priority, Service, Customer } from '../types';
+// Ruta explícita al index
+import type { Property, Status, Team, Priority, Service, Customer } from '../types/index';
 
 // FIREBASE SERVICES
 import { propertiesService } from '../services/propertiesService';
@@ -167,7 +168,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [formData, setFormData] = useState<any>({
+  // Utilizamos el tipo Property directamente
+  const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '',
     beforePhotos: [], afterPhotos: []
   });
@@ -264,7 +266,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
   };
 
-  const handleOpenForm = (house?: any) => {
+  const handleOpenForm = (house?: Property) => {
     if (house) {
       setFormData(house);
     } else {
@@ -318,9 +320,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       let isNew = false;
       
       if (!workingId) {
-        const placeholderData = { ...formData, description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' };
-        delete placeholderData.id;
-        workingId = await propertiesService.create(placeholderData as any);
+        const { id, ...restOfData } = formData;
+        const dataToCreate = { 
+          ...restOfData, 
+          description: `${formData.client} - ${formData.rooms} rooms`, 
+          city: 'TBD', 
+          size: 'TBD' 
+        };
+        workingId = await propertiesService.create(dataToCreate as any);
         isNew = true;
       }
 
@@ -340,13 +347,17 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         afterPhotos: [...(formData.afterPhotos || []), ...uploadedAfterUrls]
       };
 
-      await propertiesService.update(workingId, finalDataToUpdate);
+      // CORRECCIÓN AQUÍ: Forzamos a "any" para que TS no bloquee la actualización 
+      // por la estrictez de los literales como invoiceStatus
+      await propertiesService.update(workingId, finalDataToUpdate as any);
 
       if (isNew) {
         const fullNewData = { ...finalDataToUpdate, id: workingId, description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' };
-        setProperties([...properties, fullNewData]);
+        // CORRECCIÓN AQUÍ: Forzamos a "Property"
+        setProperties([...properties, fullNewData as Property]);
       } else {
-        setProperties(properties.map(p => p.id === workingId ? { ...finalDataToUpdate } : p));
+        // CORRECCIÓN AQUÍ: Forzamos a "Property"
+        setProperties(properties.map(p => p.id === workingId ? { ...finalDataToUpdate } as Property : p));
       }
 
       setBeforeFiles([]); setAfterFiles([]);
@@ -376,7 +387,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  const handleOpenDetail = (house: any) => {
+  const handleOpenDetail = (house: Property) => {
     setSelectedHouse(house);
     setBeforeFiles([]);
     setAfterFiles([]);
@@ -385,7 +396,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setIsDetailModalOpen(true);
   };
 
-  // --- PHOTO HANDLING LOGIC (FIXED) ---
+  // --- PHOTO HANDLING LOGIC (CLEAN TS) ---
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'before' | 'after') => {
     if (e.target.files && e.target.files.length > 0) {
       const filesArray = Array.from(e.target.files);
@@ -402,11 +413,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   };
 
   const handleRemovePhoto = (index: number, type: 'before' | 'after') => {
-    // 1. Convertimos selectedHouse a tipo 'any' para evitar errores de TS al leer fotos
-    const houseAsAny = selectedHouse as any;
     const storedCount = type === 'before' 
-      ? (houseAsAny?.beforePhotos?.length || 0) 
-      : (houseAsAny?.afterPhotos?.length || 0);
+      ? (selectedHouse?.beforePhotos?.length || 0) 
+      : (selectedHouse?.afterPhotos?.length || 0);
 
     if (type === 'before') {
       const newUrls = [...beforePhotoURLs];
@@ -662,7 +671,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       </div>
 
-      {/* --- FORM MODAL --- */}
+      {/* --- FORM MODAL (3 COLUMN GRID) --- */}
       {isFormModalOpen && (
         <div className="modal-overlay-centered" onClick={handleCloseForm}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -775,7 +784,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
       )}
 
-      {/* --- DETAIL MODAL --- */}
+      {/* --- DETAIL MODAL WITH PHOTOS & DUPLICATE --- */}
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
