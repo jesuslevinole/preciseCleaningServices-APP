@@ -10,6 +10,7 @@ import type { Property, Status, Team, Priority, Service, Customer } from '../typ
 import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
 import { customersService } from '../services/customersService';
+import { storageService } from '../services/storageService';
 
 // Settings Collections Map
 const collectionMap: Record<string, string> = {
@@ -166,13 +167,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [formData, setFormData] = useState<Property>({
-    id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: ''
+  const [formData, setFormData] = useState<any>({
+    id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '',
+    beforePhotos: [], afterPhotos: []
   });
 
-  // --- PHOTO STATES (Mockup for now) ---
-  const [beforePhotos, setBeforePhotos] = useState<string[]>([]);
-  const [afterPhotos, setAfterPhotos] = useState<string[]>([]);
+  // --- PHOTO STATES ---
+  const [beforePhotoURLs, setBeforePhotoURLs] = useState<string[]>([]);
+  const [afterPhotoURLs, setAfterPhotoURLs] = useState<string[]>([]);
+  const [beforeFiles, setBeforeFiles] = useState<File[]>([]);
+  const [afterFiles, setAfterFiles] = useState<File[]>([]);
   const beforeInputRef = useRef<HTMLInputElement>(null);
   const afterInputRef = useRef<HTMLInputElement>(null);
 
@@ -260,12 +264,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
   };
 
-  const handleOpenForm = (house?: Property) => {
+  const handleOpenForm = (house?: any) => {
     if (house) {
       setFormData(house);
     } else {
       const defaultStatus = statuses.length > 0 ? statuses[0].id : '';
-      setFormData({ id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '' });
+      setFormData({ id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '', beforePhotos: [], afterPhotos: [] });
     }
     setSelectedHouse(house || null);
     setIsDetailModalOpen(false);
@@ -275,12 +279,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   // --- DUPLICATION LOGIC ---
   const handleDuplicate = () => {
     if (!selectedHouse) return;
-    // Set the form data to the selected house's data, BUT clear the ID so it creates a new record
     setFormData({
       ...selectedHouse,
-      id: ''
+      id: '', 
+      beforePhotos: [], 
+      afterPhotos: []
     });
-    // Open form modal for editing before saving
     setIsDetailModalOpen(false);
     setIsFormModalOpen(true);
   };
@@ -303,29 +307,52 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
+  // --- FIREBASE SAVE + STORAGE UPLOAD LOGIC ---
   const handleSave = async () => {
     if (!formData.client) return alert("Client is required.");
     if (!formData.address) return alert("Address is required.");
 
     setIsSaving(true);
     try {
-      if (formData.id) { // Solo si formData tiene ID, es una actualización
-        const { id, ...dataToUpdate } = formData; 
-        await propertiesService.update(formData.id, dataToUpdate);
-        setProperties(properties.map(p => p.id === formData.id ? { ...formData } : p));
-      } else { // Si no tiene ID (creación nueva o duplicado)
-        const { id, ...dataToAdd } = formData; 
-        const completeData = {
-          ...dataToAdd,
-          description: `${formData.client} - ${formData.rooms} rooms`,
-          city: 'TBD',
-          size: 'TBD'
-        };
-
-        const newId = await propertiesService.create(completeData as unknown as Omit<Property, 'id'>);
-        setProperties([...properties, { ...formData, id: newId, description: completeData.description, city: completeData.city, size: completeData.size }]);
+      let workingId = formData.id;
+      let isNew = false;
+      
+      if (!workingId) {
+        const placeholderData = { ...formData, description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' };
+        delete placeholderData.id;
+        workingId = await propertiesService.create(placeholderData as any);
+        isNew = true;
       }
+
+      let uploadedBeforeUrls: string[] = [];
+      if (beforeFiles.length > 0) {
+        uploadedBeforeUrls = await Promise.all(beforeFiles.map(file => storageService.uploadPropertyPhoto(file, workingId, 'before')));
+      }
+
+      let uploadedAfterUrls: string[] = [];
+      if (afterFiles.length > 0) {
+        uploadedAfterUrls = await Promise.all(afterFiles.map(file => storageService.uploadPropertyPhoto(file, workingId, 'after')));
+      }
+
+      const finalDataToUpdate = {
+        ...formData,
+        beforePhotos: [...(formData.beforePhotos || []), ...uploadedBeforeUrls],
+        afterPhotos: [...(formData.afterPhotos || []), ...uploadedAfterUrls]
+      };
+
+      await propertiesService.update(workingId, finalDataToUpdate);
+
+      if (isNew) {
+        const fullNewData = { ...finalDataToUpdate, id: workingId, description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' };
+        setProperties([...properties, fullNewData]);
+      } else {
+        setProperties(properties.map(p => p.id === workingId ? { ...finalDataToUpdate } : p));
+      }
+
+      setBeforeFiles([]); setAfterFiles([]);
+      setBeforePhotoURLs([]); setAfterPhotoURLs([]);
       handleCloseForm();
+
     } catch (error) {
       console.error("Error saving to Firebase:", error);
       alert("Error trying to save property to Firebase.");
@@ -336,7 +363,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   const handleDelete = async () => {
     if(!selectedHouse) return;
-    
     setIsSaving(true);
     try {
       await propertiesService.delete(selectedHouse.id);
@@ -350,22 +376,59 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  const handleOpenDetail = (house: Property) => {
+  const handleOpenDetail = (house: any) => {
     setSelectedHouse(house);
-    // Reset local photo states when opening a new detail modal
-    setBeforePhotos([]);
-    setAfterPhotos([]);
+    setBeforeFiles([]);
+    setAfterFiles([]);
+    setBeforePhotoURLs(house.beforePhotos || []);
+    setAfterPhotoURLs(house.afterPhotos || []);
     setIsDetailModalOpen(true);
   };
 
-  // --- PHOTO HANDLING LOGIC (Local State Mockup) ---
+  // --- PHOTO HANDLING LOGIC (FIXED) ---
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'before' | 'after') => {
     if (e.target.files && e.target.files.length > 0) {
-      const fileUrls = Array.from(e.target.files).map(file => URL.createObjectURL(file));
+      const filesArray = Array.from(e.target.files);
+      const fileUrls = filesArray.map(file => URL.createObjectURL(file)); 
+      
       if (type === 'before') {
-        setBeforePhotos(prev => [...prev, ...fileUrls]);
+        setBeforeFiles(prev => [...prev, ...filesArray]); 
+        setBeforePhotoURLs(prev => [...prev, ...fileUrls]); 
       } else {
-        setAfterPhotos(prev => [...prev, ...fileUrls]);
+        setAfterFiles(prev => [...prev, ...filesArray]);
+        setAfterPhotoURLs(prev => [...prev, ...fileUrls]);
+      }
+    }
+  };
+
+  const handleRemovePhoto = (index: number, type: 'before' | 'after') => {
+    // 1. Convertimos selectedHouse a tipo 'any' para evitar errores de TS al leer fotos
+    const houseAsAny = selectedHouse as any;
+    const storedCount = type === 'before' 
+      ? (houseAsAny?.beforePhotos?.length || 0) 
+      : (houseAsAny?.afterPhotos?.length || 0);
+
+    if (type === 'before') {
+      const newUrls = [...beforePhotoURLs];
+      newUrls.splice(index, 1);
+      setBeforePhotoURLs(newUrls);
+      
+      if (index >= storedCount) {
+        const fileIndex = index - storedCount;
+        const newFiles = [...beforeFiles];
+        newFiles.splice(fileIndex, 1);
+        setBeforeFiles(newFiles);
+      }
+    } else {
+      const newUrls = [...afterPhotoURLs];
+      newUrls.splice(index, 1);
+      setAfterPhotoURLs(newUrls);
+      
+      if (index >= storedCount) {
+        const fileIndex = index - storedCount;
+        const newFiles = [...afterFiles];
+        newFiles.splice(fileIndex, 1);
+        setAfterFiles(newFiles);
       }
     }
   };
@@ -485,7 +548,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         )}
       </div>
 
-      {/* 2-COLUMN MAIN CONTENT */}
       <div className="main-columns">
 
         {/* LEFT COLUMN: DAILY JOBS */}
@@ -507,7 +569,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
-            {/* RESPONSIVE TABLE WITH INLINE STATUS CHANGE */}
             <div style={{ overflowX: 'auto', padding: '10px 20px 40px 20px', minHeight: '300px' }}>
               <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '100%' }}>
                 <thead>
@@ -537,18 +598,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                       >
                         <td data-label="Actions" style={s.td}>
                           <div style={{ display: 'flex', gap: '4px' }}>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleOpenForm(prop); }}
-                              style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px', display: 'flex' }}
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); setSelectedHouse(prop); handleDelete(); }}
-                              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px', display: 'flex' }}
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleOpenForm(prop); }} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px', display: 'flex' }}><Edit2 size={16} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setSelectedHouse(prop); handleDelete(); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px', display: 'flex' }}><Trash2 size={16} /></button>
                           </div>
                         </td>
                         <td data-label="Client" style={s.td}>
@@ -562,14 +613,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                         <td data-label="Time" style={{ ...s.td, color: '#6b7280' }}><Clock size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} /> {prop.timeIn || '08:00 AM'}</td>
                         <td data-label="Type" style={{ ...s.td, fontWeight: 500 }}>{serviceName}</td>
                         <td data-label="Team" style={{ ...s.td, color: '#6b7280' }}>{teamName}</td>
-                        
                         <td data-label="Status" style={{ ...s.td, textAlign: 'right' }}>
-                          <StatusPillSelector 
-                            currentStatusId={prop.statusId} 
-                            statuses={statuses} 
-                            onChange={(newId) => handleQuickStatusChange(prop.id, newId)} 
-                            disabled={isSaving} 
-                          />
+                          <StatusPillSelector currentStatusId={prop.statusId} statuses={statuses} onChange={(newId) => handleQuickStatusChange(prop.id, newId)} disabled={isSaving} />
                         </td>
                       </tr>
                     );
@@ -593,19 +638,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               ) : (
                 teams.map(team => {
                   const assignedProps = properties.filter(p => p.teamId === team.id || p.teamId === team.name);
-                  
                   return (
                     <div key={team.id} style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: `${team.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: team.color }}>
-                            <Users size={18} />
-                          </div>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: `${team.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: team.color }}><Users size={18} /></div>
                           <div>
                             <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{team.name}</div>
-                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                              {assignedProps.length > 0 ? `${assignedProps.length} jobs today` : 'Free'}
-                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{assignedProps.length > 0 ? `${assignedProps.length} jobs today` : 'Free'}</div>
                           </div>
                         </div>
                       </div>
@@ -622,7 +662,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       </div>
 
-      {/* --- FORM MODAL (3 COLUMN GRID) --- */}
+      {/* --- FORM MODAL --- */}
       {isFormModalOpen && (
         <div className="modal-overlay-centered" onClick={handleCloseForm}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -636,14 +676,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
                 <div>
                   <label style={s.label}>Client <span style={{ color: '#3b82f6' }}>*</span></label>
-                  <CustomSelect 
-                    options={customersList} 
-                    value={formData.client} 
-                    onChange={handleCustomerSelect} 
-                    placeholder="Select Client..." 
-                    icon={User} 
-                    returnKey="name" 
-                  />
+                  <CustomSelect options={customersList} value={formData.client} onChange={handleCustomerSelect} placeholder="Select Client..." icon={User} returnKey="name" />
                 </div>
                 <div>
                   <label style={s.label}>Address <span style={{ color: '#3b82f6' }}>*</span></label>
@@ -742,7 +775,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
       )}
 
-      {/* --- DETAIL MODAL WITH PHOTOS & DUPLICATE --- */}
+      {/* --- DETAIL MODAL --- */}
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -764,12 +797,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
                   <div style={{ marginTop: '4px' }}>
-                    <StatusPillSelector 
-                      currentStatusId={selectedHouse.statusId} 
-                      statuses={statuses} 
-                      onChange={(newId: string) => handleQuickStatusChange(selectedHouse.id, newId)} 
-                      disabled={isSaving} 
-                    />
+                    <StatusPillSelector currentStatusId={selectedHouse.statusId} statuses={statuses} onChange={(newId: string) => handleQuickStatusChange(selectedHouse.id, newId)} disabled={isSaving} />
                   </div>
                 </div>
                 <div style={s.detailItem}>
@@ -826,91 +854,65 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </div>
                 </div>
 
-                {/* --- 1. NEW PHOTO SECTIONS --- */}
+                {/* PHOTO SECTIONS */}
                 <div className="col-span-full" style={{ marginTop: '10px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                    
-                    {/* Before Photos */}
                     <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <span style={s.detailLabel}><ImageIcon size={14} /> BEFORE PHOTOS</span>
-                        <button onClick={() => beforeInputRef.current?.click()} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
+                        <button onClick={() => beforeInputRef.current?.click()} disabled={isSaving} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
                         <input type="file" multiple accept="image/*" ref={beforeInputRef} style={{ display: 'none' }} onChange={(e) => handlePhotoUpload(e, 'before')} />
                       </div>
-                      {beforePhotos.length === 0 ? (
-                        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos uploaded</div>
-                      ) : (
+                      {beforePhotoURLs.length === 0 ? <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos</div> : 
                         <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
-                          {beforePhotos.map((url, i) => (
-                            <img key={i} src={url} alt={`Before ${i}`} style={{ height: '80px', width: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+                          {beforePhotoURLs.map((url, i) => (
+                            <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+                              <img src={url} alt="Before" style={{ height: '80px', width: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+                              <button onClick={() => handleRemovePhoto(i, 'before')} style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                            </div>
                           ))}
                         </div>
-                      )}
+                      }
                     </div>
-
-                    {/* After Photos */}
                     <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <span style={s.detailLabel}><ImageIcon size={14} /> AFTER PHOTOS</span>
-                        <button onClick={() => afterInputRef.current?.click()} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
+                        <button onClick={() => afterInputRef.current?.click()} disabled={isSaving} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
                         <input type="file" multiple accept="image/*" ref={afterInputRef} style={{ display: 'none' }} onChange={(e) => handlePhotoUpload(e, 'after')} />
                       </div>
-                      {afterPhotos.length === 0 ? (
-                        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos uploaded</div>
-                      ) : (
+                      {afterPhotoURLs.length === 0 ? <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos</div> : 
                         <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
-                          {afterPhotos.map((url, i) => (
-                            <img key={i} src={url} alt={`After ${i}`} style={{ height: '80px', width: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+                          {afterPhotoURLs.map((url, i) => (
+                            <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+                              <img src={url} alt="After" style={{ height: '80px', width: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+                              <button onClick={() => handleRemovePhoto(i, 'after')} style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                            </div>
                           ))}
                         </div>
-                      )}
+                      }
                     </div>
-
                   </div>
+                  {(beforeFiles.length > 0 || afterFiles.length > 0) && (
+                    <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                       <button onClick={handleSave} disabled={isSaving} style={{...s.btnPrimary, display: 'inline-flex'}}>{isSaving ? 'Uploading...' : 'Save Photos'}</button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="col-span-full">
-                  <div style={s.noteBoxGray}>
-                    <span style={{ ...s.detailLabel, marginBottom: '8px' }}><StickyNote size={14} /> GENERAL NOTE</span>
-                    <span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.note || 'No notes provided.'}</span>
-                  </div>
-                </div>
-
-                <div className="col-span-full">
-                  <div style={s.noteBoxOrange}>
-                    <span style={{ ...s.detailLabel, marginBottom: '8px', color: '#c2410c' }}><PenTool size={14} /> EMPLOYEE'S NOTE</span>
-                    <span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.employeeNote || 'No employee notes provided.'}</span>
-                  </div>
-                </div>
+                <div className="col-span-full"><div style={s.noteBoxGray}><span style={{ ...s.detailLabel, marginBottom: '8px' }}><StickyNote size={14} /> GENERAL NOTE</span><span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.note || 'No notes.'}</span></div></div>
+                <div className="col-span-full"><div style={s.noteBoxOrange}><span style={{ ...s.detailLabel, marginBottom: '8px', color: '#c2410c' }}><PenTool size={14} /> EMPLOYEE'S NOTE</span><span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.employeeNote || 'No employee notes.'}</span></div></div>
 
               </div>
             </div>
 
             <footer style={s.footerBetween}>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}>
-                  <Trash2 size={16} style={{ marginRight: '6px' }} /> {isSaving ? 'Deleting...' : 'Delete Property'}
-                </button>
-                
-                {/* 2. DUPLICATE BUTTON */}
-                <button 
-                  onClick={handleDuplicate}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
-                >
-                  <Copy size={16} /> Duplicate Job
-                </button>
+                <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}><Trash2 size={16} style={{ marginRight: '6px' }} /> Delete</button>
+                <button onClick={handleDuplicate} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}><Copy size={16} /> Duplicate</button>
               </div>
-
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
-                
-                <button 
-                  onClick={() => { setIsDetailModalOpen(false); onCheckHouse && onCheckHouse(selectedHouse); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
-                >
-                  <ClipboardCheck size={16} /> Quality Check
-                </button>
-
+                <button onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}><ClipboardCheck size={16} /> Quality Check</button>
                 <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>
               </div>
             </footer>
