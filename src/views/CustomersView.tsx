@@ -30,15 +30,18 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
     id: '', color: '#e5e7eb', type: 'Property manager', name: '', business: 'Regular', note: '', address: '', cityStateZip: '', email: ''
   });
 
-  // --- CARGA INICIAL DESDE FIREBASE ---
+  // --- CARGA INICIAL DESDE FIREBASE ROBUSTA ---
   useEffect(() => {
     const fetchCustomers = async () => {
       setIsLoading(true);
       try {
         const data = await customersService.getAll();
         if (data) setCustomers(data);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching customers:", error);
+        if (error.code === 'permission-denied') {
+           console.error("Firebase Auth: Permission Denied to read customers.");
+        }
       } finally {
         setIsLoading(false);
       }
@@ -105,27 +108,31 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
     setSelectedCustomer(null);
   };
 
-  // --- GUARDADO ASÍNCRONO ---
+  // --- GUARDADO ASÍNCRONO ROBUSTO ---
   const handleSave = async () => {
     if (formData.name.trim() === '') return alert('Customer Name is required.');
     
     setIsSaving(true);
     try {
       if (selectedCustomer && selectedCustomer.id) {
-        // Actualizar
+        // Actualizar (usando as any para evitar conflictos TS y destructurando para quitar el id)
         const { id, ...dataToUpdate } = formData;
-        await customersService.update(selectedCustomer.id, dataToUpdate);
+        await customersService.update(selectedCustomer.id, dataToUpdate as any);
         setCustomers(customers.map(c => c.id === selectedCustomer.id ? { ...formData } : c));
       } else {
         // Crear
         const { id, ...dataToAdd } = formData;
-        const newId = await customersService.create(dataToAdd);
+        const newId = await customersService.create(dataToAdd as any);
         setCustomers([...customers, { ...formData, id: newId }]);
       }
       handleCloseForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al guardar:", error);
-      alert("Hubo un error al guardar el cliente.");
+      if (error.code === 'permission-denied') {
+        alert("❌ Firebase Error: Access Denied. You don't have permissions to write to the database.");
+      } else {
+        alert("❌ Error: Could not save customer. Please try again.");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -141,7 +148,7 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
     setIsDeleteModalOpen(true);
   };
 
-  // --- ELIMINADO ASÍNCRONO ---
+  // --- ELIMINADO ASÍNCRONO ROBUSTO ---
   const confirmDelete = async () => {
     if (!itemToDelete) return;
     
@@ -152,9 +159,13 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
       setItemToDelete(null);
       setIsDeleteModalOpen(false);
       setIsDetailModalOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al eliminar:", error);
-      alert("Hubo un error al intentar eliminar el cliente.");
+      if (error.code === 'permission-denied') {
+        alert("❌ Firebase Error: Access Denied. You don't have permissions to delete this record.");
+      } else {
+        alert("❌ Error: Could not delete customer.");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -245,9 +256,9 @@ export default function CustomersView({ onOpenMenu }: CustomersViewProps) {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280', padding: '40px' }}>Cargando clientes...</td></tr>
+                <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280', padding: '40px' }}>Loading customers...</td></tr>
               ) : customers.length === 0 ? (
-                <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280', fontStyle: 'italic', padding: '40px' }}>No hay clientes registrados.</td></tr>
+                <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280', fontStyle: 'italic', padding: '40px' }}>No customers registered.</td></tr>
               ) : (
                 customers.map((customer) => (
                   <tr key={customer.id} onClick={() => handleOpenDetail(customer)} style={{ cursor: 'pointer', transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
