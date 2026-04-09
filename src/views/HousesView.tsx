@@ -67,14 +67,14 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
   );
 };
 
-// --- INLINE STATUS PILL SELECTOR (NUEVO: Acciones rápidas) ---
+// --- INLINE STATUS PILL SELECTOR (Texto Neutral con Punto de Color) ---
 const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: { currentStatusId: string, statuses: Status[], onChange: (id: string) => void, disabled: boolean }) => {
   const [isOpen, setIsOpen] = useState(false);
   const safeValue = String(currentStatusId || '').toLowerCase().trim();
   const status = statuses.find(s => String(s.id).toLowerCase().trim() === safeValue || String(s.name).toLowerCase().trim() === safeValue);
   
-  const bg = status ? `${status.color}15` : '#f1f5f9';
-  const color = status ? status.color : '#64748b';
+  // UX Mejorada: Fondo transparente/neutral, letra oscura, punto del color real.
+  const pointColor = status ? status.color : '#64748b';
   const text = status ? status.name : 'Unassigned';
 
   return (
@@ -82,21 +82,24 @@ const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: {
       <div 
         onClick={(e) => { e.stopPropagation(); if(!disabled) setIsOpen(!isOpen); }}
         style={{ 
-          backgroundColor: bg, color: color, padding: '4px 10px', borderRadius: '12px', 
-          fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px',
-          cursor: disabled ? 'not-allowed' : 'pointer', border: `1px solid ${color}30`, transition: 'all 0.2s'
+          backgroundColor: 'transparent', color: '#111827', padding: '6px 12px', borderRadius: '20px', 
+          fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px',
+          cursor: disabled ? 'not-allowed' : 'pointer', border: '1px solid #e5e7eb', transition: 'all 0.2s',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
         }}
+        onMouseEnter={(e) => { if(!disabled) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+        onMouseLeave={(e) => { if(!disabled) e.currentTarget.style.backgroundColor = 'transparent'; }}
       >
-        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: color }}></span>
+        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: pointColor }}></span>
         {text}
-        <ChevronDown size={12} style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+        <ChevronDown size={14} color="#9ca3af" style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
       </div>
 
       {isOpen && (
         <div style={{ 
           position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'white', 
           border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', 
-          zIndex: 9999, minWidth: '160px', overflow: 'hidden', textAlign: 'left'
+          zIndex: 9999, minWidth: '180px', overflow: 'hidden', textAlign: 'left'
         }}>
           {statuses.map((s) => (
             <div 
@@ -108,14 +111,15 @@ const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: {
                 setIsOpen(false); 
               }}
               style={{ 
-                padding: '10px 14px', fontSize: '0.8rem', fontWeight: 600, color: s.color, 
-                display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
-                backgroundColor: (currentStatusId === s.id || currentStatusId === s.name) ? `${s.color}15` : 'transparent'
+                padding: '12px 14px', fontSize: '0.85rem', fontWeight: 500, color: '#111827', 
+                display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
+                backgroundColor: (currentStatusId === s.id || currentStatusId === s.name) ? '#f8fafc' : 'transparent',
+                borderBottom: '1px solid #f1f5f9'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = (currentStatusId === s.id || currentStatusId === s.name) ? `${s.color}15` : 'transparent'}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = (currentStatusId === s.id || currentStatusId === s.name) ? '#f8fafc' : 'transparent'}
             >
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: s.color }}></span>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: s.color, flexShrink: 0 }}></span>
               {s.name}
             </div>
           ))}
@@ -201,12 +205,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
     setIsSaving(true);
     try {
-      // Background update in Firebase
       await propertiesService.update(propertyId, { statusId: newStatusId });
-      // Instant Optimistic Update in UI
       setProperties(properties.map(p => p.id === propertyId ? { ...p, statusId: newStatusId } : p));
       
-      // Update the Detail Modal state if it's currently open
       if (selectedHouse && selectedHouse.id === propertyId) {
         setSelectedHouse({ ...selectedHouse, statusId: newStatusId });
       }
@@ -222,7 +223,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const s = {
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
-    body: { padding: '30px', overflowY: 'auto', paddingBottom: '60px' } as React.CSSProperties, // Padding bottom for dropdown safety
+    body: { padding: '30px', overflowY: 'auto', paddingBottom: '60px' } as React.CSSProperties, 
     footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
 
@@ -384,7 +385,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
 
-        /* Card Table Mobile First */
         @media (max-width: 768px) {
           .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
           .responsive-table thead { display: none; }
@@ -819,7 +819,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
                 
                 <button 
-                  onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }}
+                  onClick={() => { setIsDetailModalOpen(false); onCheckHouse && onCheckHouse(selectedHouse); }}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
                 >
                   <ClipboardCheck size={16} /> Quality Check
