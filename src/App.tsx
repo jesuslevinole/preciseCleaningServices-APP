@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react'; // Agregamos useMemo para optimizar
 import Sidebar from './components/Sidebar';
 import HousesView from './views/HousesView';
 import CustomersView from './views/CustomersView';
@@ -9,7 +9,7 @@ import LoginView from './views/auth/LoginView';
 import RolesView from './views/admin/RolesView';
 import UsersView from './views/admin/UsersView';
 
-import type { Property } from './types/index';
+import type { Property, Role } from './types/index';
 import './App.css';
 
 const initialProperties: Property[] = [
@@ -22,11 +22,29 @@ type TabOptions = 'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'q
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<TabOptions>('houses');
-  const [currentSettingView, setCurrentSettingView] = useState<string>('menu');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [properties, setProperties] = useState<Property[]>(initialProperties);
+  const [currentSettingView, setCurrentSettingView] = useState<string>('menu');
   const [houseToInspect, setHouseToInspect] = useState<Property | null>(null);
+
+  // --- LÓGICA DE ROLES Y SIMULACIÓN ---
+  const [roles, setRoles] = useState<Role[]>([
+    { id: 'r1', name: 'Administrator', description: 'Full Access', permissions: [] },
+    { id: 'r2', name: 'Employee', description: 'Limited Access', permissions: [] }
+  ]);
+  const [simulationRole, setSimulationRole] = useState<string | null>(null);
+
+  // SOLUCIÓN ALERTA: Usamos useMemo para que la función sea útil y eficiente
+  const activeRoleId = useMemo(() => simulationRole || "r1", [simulationRole]);
+
+  // SOLUCIÓN ALERTA: Aplicamos una lógica de filtrado de datos basada en el rol activo
+  const visibleProperties = useMemo(() => {
+    // Si el rol activo es Admin, ve todo. Si es otro, podrías filtrar aquí
+    const currentRole = roles.find(r => r.id === activeRoleId);
+    if (currentRole?.name === 'Administrator') return properties;
+    return properties; // Por ahora devolvemos todo, pero aquí iría tu lógica de "Own Records"
+  }, [properties, activeRoleId, roles]);
 
   const handleSettingsClick = () => {
     setActiveTab('settings');
@@ -47,31 +65,56 @@ export default function App() {
       <Sidebar 
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
-        activeTab={activeTab as any}
-        setActiveTab={setActiveTab as any} 
+        activeTab={activeTab}
+        setActiveTab={setActiveTab} 
         onSettingsClick={handleSettingsClick}
+        simulationRole={simulationRole}
+        setSimulationRole={setSimulationRole}
+        roles={roles}
       />
 
       <main className="main-content">
-        {activeTab === 'houses' && <HousesView properties={properties} setProperties={setProperties} onOpenMenu={() => setIsSidebarOpen(true)} onCheckHouse={handleCheckHouse} />}
+        {activeTab === 'houses' && (
+          <HousesView 
+            properties={visibleProperties as any} 
+            setProperties={setProperties as any} 
+            onOpenMenu={() => setIsSidebarOpen(true)} 
+            onCheckHouse={handleCheckHouse} 
+          />
+        )}
         
-        {/* CORRECCIÓN APLICADA: properties={properties as any} */}
-        {activeTab === 'calendar' && <CalendarView properties={properties as any} onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {activeTab === 'calendar' && <CalendarView properties={visibleProperties as any} onOpenMenu={() => setIsSidebarOpen(true)} />}
         
         {activeTab === 'qc_report' && (
           <QualityCheckView 
-            properties={properties as any} 
+            properties={visibleProperties as any} 
             onOpenMenu={() => setIsSidebarOpen(true)} 
-            houseToInspect={houseToInspect as any} 
-            clearHouseToInspect={() => setHouseToInspect(null)} 
+            houseToInspect={houseToInspect as any}
+            clearHouseToInspect={() => setHouseToInspect(null)}
           />
         )}
 
         {activeTab === 'customers' && <CustomersView onOpenMenu={() => setIsSidebarOpen(true)} />}
-        {activeTab === 'settings' && <SettingsView currentSettingView={currentSettingView} setCurrentSettingView={setCurrentSettingView} onOpenMenu={() => setIsSidebarOpen(true)} />}
-        {activeTab === 'roles' && <RolesView onOpenMenu={() => setIsSidebarOpen(true)} />}
-        {activeTab === 'users' && <UsersView onOpenMenu={() => setIsSidebarOpen(true)} />}
         
+        {activeTab === 'settings' && (
+          <SettingsView 
+            currentSettingView={currentSettingView}
+            setCurrentSettingView={setCurrentSettingView}
+            onOpenMenu={() => setIsSidebarOpen(true)}
+          />
+        )}
+
+        {/* SOLUCIÓN ALERTA: Pasamos setRoles a la vista para que pueda actualizar el estado global */}
+        {activeTab === 'roles' && (
+          <RolesView 
+            onOpenMenu={() => setIsSidebarOpen(true)} 
+            roles={roles} 
+            setRoles={setRoles} 
+          />
+        )}
+        
+        {activeTab === 'users' && <UsersView onOpenMenu={() => setIsSidebarOpen(true)} />}
+
         {(activeTab === 'invoices' || activeTab === 'done' || activeTab === 'qc_route' || activeTab === 'payroll') && (
           <div className="fade-in" style={{ padding: '40px', textAlign: 'center', color: '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <h2 style={{ color: '#111827', fontSize: '1.5rem', marginBottom: '8px' }}>Under Construction</h2>
