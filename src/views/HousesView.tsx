@@ -4,16 +4,14 @@ import {
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
   Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy
 } from 'lucide-react';
-// Ruta explícita al index
+
 import type { Property, Status, Team, Priority, Service, Customer } from '../types/index';
 
-// FIREBASE SERVICES
 import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
 import { customersService } from '../services/customersService';
 import { storageService } from '../services/storageService';
 
-// Settings Collections Map
 const collectionMap: Record<string, string> = {
   team: 'settings_teams',
   priority: 'settings_priorities',
@@ -31,7 +29,7 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
   );
 
   return (
-    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
+    <div tabIndex={0} onBlur={() => setTimeout(() => setIsOpen(false), 200)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', position: 'relative' }}
@@ -54,10 +52,10 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
           {options.map((o: any) => (
             <div 
               key={o.id} 
-              style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
-              onMouseDown={(e) => { e.preventDefault(); onChange(o[returnKey] || o.id); setIsOpen(false); }}
+              style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb', backgroundColor: value === o.id ? '#f1f5f9' : 'transparent' }}
+              onClick={() => { onChange(o[returnKey] || o.id); setIsOpen(false); }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = value === o.id ? '#f1f5f9' : 'transparent')}
             >
               {o.color && <span style={{ backgroundColor: o.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', flexShrink: 0 }}></span>}
               <span style={{ color: '#111827', fontWeight: 500 }}>{o.name}</span>
@@ -79,7 +77,7 @@ const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: {
   const text = status ? status.name : 'Unassigned';
 
   return (
-    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', display: 'inline-block', outline: 'none' }}>
+    <div tabIndex={0} onBlur={() => setTimeout(() => setIsOpen(false), 200)} style={{ position: 'relative', display: 'inline-block', outline: 'none' }}>
       <div 
         onClick={(e) => { e.stopPropagation(); if(!disabled) setIsOpen(!isOpen); }}
         style={{ 
@@ -105,7 +103,7 @@ const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: {
           {statuses.map((s) => (
             <div 
               key={s.id}
-              onMouseDown={(e) => { 
+              onClick={(e) => { 
                 e.preventDefault(); 
                 e.stopPropagation();
                 if(s.id !== currentStatusId && s.name !== currentStatusId) onChange(s.id); 
@@ -158,7 +156,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
   
-  // --- FIREBASE STATES ---
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [priorities, setPriorities] = useState<Priority[]>([]);
@@ -168,13 +165,11 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Utilizamos el tipo Property directamente
   const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '',
     beforePhotos: [], afterPhotos: []
   });
 
-  // --- PHOTO STATES ---
   const [beforePhotoURLs, setBeforePhotoURLs] = useState<string[]>([]);
   const [afterPhotoURLs, setAfterPhotoURLs] = useState<string[]>([]);
   const [beforeFiles, setBeforeFiles] = useState<File[]>([]);
@@ -182,43 +177,41 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const beforeInputRef = useRef<HTMLInputElement>(null);
   const afterInputRef = useRef<HTMLInputElement>(null);
 
-  // --- FETCH DATA FROM FIREBASE ON MOUNT ---
+  // --- FETCH DATA ROBUSTO A PRUEBA DE FALLOS ---
   useEffect(() => {
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
         const [ propsData, statusData, teamData, prioData, servData, custData ] = await Promise.all([
-          propertiesService.getAll(),
-          settingsService.getAll(collectionMap.status),
-          settingsService.getAll(collectionMap.team),
-          settingsService.getAll(collectionMap.priority),
-          settingsService.getAll(collectionMap.service),
-          customersService.getAll() 
+          propertiesService.getAll().catch(e => { console.error("Error Properties:", e); return []; }),
+          settingsService.getAll(collectionMap.status).catch(e => { console.error("Error Status:", e); return []; }),
+          settingsService.getAll(collectionMap.team).catch(e => { console.error("Error Teams:", e); return []; }),
+          settingsService.getAll(collectionMap.priority).catch(e => { console.error("Error Priorities:", e); return []; }),
+          settingsService.getAll(collectionMap.service).catch(e => { console.error("Error Services:", e); return []; }),
+          customersService.getAll().catch(e => { console.error("Error Customers:", e); return []; }) 
         ]);
 
-        if (propsData) setProperties(propsData);
-        if (statusData) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
-        if (teamData) setTeams(teamData as Team[]);
-        if (prioData) setPriorities(prioData as Priority[]);
-        if (servData) setServices(servData as Service[]);
-        if (custData) setCustomersList(custData);
+        if (propsData && propsData.length > 0) setProperties(propsData);
+        if (statusData && statusData.length > 0) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
+        if (teamData && teamData.length > 0) setTeams(teamData as Team[]);
+        if (prioData && prioData.length > 0) setPriorities(prioData as Priority[]);
+        if (servData && servData.length > 0) setServices(servData as Service[]);
+        if (custData && custData.length > 0) setCustomersList(custData);
 
       } catch (error) {
-        console.error("Error loading data from Firebase:", error);
+        console.error("Critical error loading Firebase data:", error);
       } finally {
-        setIsLoading(false);
+        setIsLoading(false); // Apaga la carga obligatoriamente
       }
     };
     fetchAllData();
   }, [setProperties]);
 
-  // --- QUICK INLINE STATUS CHANGE LOGIC ---
   const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
     setIsSaving(true);
     try {
       await propertiesService.update(propertyId, { statusId: newStatusId });
       setProperties(properties.map(p => p.id === propertyId ? { ...p, statusId: newStatusId } : p));
-      
       if (selectedHouse && selectedHouse.id === propertyId) {
         setSelectedHouse({ ...selectedHouse, statusId: newStatusId });
       }
@@ -230,7 +223,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  // --- SECURE INLINE STYLES ---
   const s = {
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
@@ -255,15 +247,17 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
     noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', width: '100%' } as React.CSSProperties,
 
-    dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' },
     kpiCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' },
     kpiIconBox: (color: string) => ({ backgroundColor: `${color}15`, color: color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
-    mainColumns: { display: 'flex', gap: '24px', flexWrap: 'wrap' as const },
     tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' } as React.CSSProperties,
     pillBtn: (active: boolean) => ({ padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: active ? '#10b981' : 'transparent', color: active ? 'white' : '#6b7280', transition: 'all 0.2s', whiteSpace: 'nowrap' as const }),
 
     th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
+
+    // --- CLASES AGREGADAS PARA CORREGIR EL ERROR TS ---
+    dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' } as React.CSSProperties,
+    mainColumns: { display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'flex-start' } as React.CSSProperties,
   };
 
   const handleOpenForm = (house?: Property) => {
@@ -278,15 +272,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setIsFormModalOpen(true);
   };
 
-  // --- DUPLICATION LOGIC ---
   const handleDuplicate = () => {
     if (!selectedHouse) return;
-    setFormData({
-      ...selectedHouse,
-      id: '', 
-      beforePhotos: [], 
-      afterPhotos: []
-    });
+    setFormData({ ...selectedHouse, id: '', beforePhotos: [], afterPhotos: [] });
     setIsDetailModalOpen(false);
     setIsFormModalOpen(true);
   };
@@ -299,17 +287,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const handleCustomerSelect = (customerName: string) => {
     const selectedCust = customersList.find(c => c.name === customerName);
     if (selectedCust) {
-      setFormData({
-        ...formData,
-        client: customerName,
-        address: selectedCust.address || formData.address 
-      });
+      setFormData({ ...formData, client: customerName, address: selectedCust.address || formData.address });
     } else {
       setFormData({ ...formData, client: customerName });
     }
   };
 
-  // --- FIREBASE SAVE + STORAGE UPLOAD LOGIC ---
   const handleSave = async () => {
     if (!formData.client) return alert("Client is required.");
     if (!formData.address) return alert("Address is required.");
@@ -320,6 +303,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       let isNew = false;
       
       if (!workingId) {
+        // CORRECCIÓN: Evitamos mutar con delete, usamos desestructuración
         const { id, ...restOfData } = formData;
         const dataToCreate = { 
           ...restOfData, 
@@ -347,16 +331,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         afterPhotos: [...(formData.afterPhotos || []), ...uploadedAfterUrls]
       };
 
-      // CORRECCIÓN AQUÍ: Forzamos a "any" para que TS no bloquee la actualización 
-      // por la estrictez de los literales como invoiceStatus
+      // CORRECCIÓN: 'as any' para evitar conflictos de tipos literales
       await propertiesService.update(workingId, finalDataToUpdate as any);
 
       if (isNew) {
         const fullNewData = { ...finalDataToUpdate, id: workingId, description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' };
-        // CORRECCIÓN AQUÍ: Forzamos a "Property"
         setProperties([...properties, fullNewData as Property]);
       } else {
-        // CORRECCIÓN AQUÍ: Forzamos a "Property"
         setProperties(properties.map(p => p.id === workingId ? { ...finalDataToUpdate } as Property : p));
       }
 
@@ -396,7 +377,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setIsDetailModalOpen(true);
   };
 
-  // --- PHOTO HANDLING LOGIC (CLEAN TS) ---
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'before' | 'after') => {
     if (e.target.files && e.target.files.length > 0) {
       const filesArray = Array.from(e.target.files);
@@ -413,9 +393,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   };
 
   const handleRemovePhoto = (index: number, type: 'before' | 'after') => {
-    const storedCount = type === 'before' 
-      ? (selectedHouse?.beforePhotos?.length || 0) 
-      : (selectedHouse?.afterPhotos?.length || 0);
+    const storedCount = type === 'before' ? (selectedHouse?.beforePhotos?.length || 0) : (selectedHouse?.afterPhotos?.length || 0);
 
     if (type === 'before') {
       const newUrls = [...beforePhotoURLs];
@@ -442,12 +420,10 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  const filteredProperties = activeFilter === 'All' 
-    ? properties 
-    : properties.filter(p => {
-        const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
-        return st?.name === activeFilter;
-      });
+  const filteredProperties = activeFilter === 'All' ? properties : properties.filter(p => {
+    const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
+    return st?.name === activeFilter;
+  });
 
   const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
   const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
@@ -459,53 +435,19 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   return (
     <div className="fade-in" style={{ padding: '20px' }}>
-
       <style>{`
-        .modal-overlay-centered {
-          position: fixed;
-          inset: 0; 
-          background-color: rgba(15, 23, 42, 0.6);
-          backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 9999;
-          padding: 20px;
-          box-sizing: border-box;
-        }
-
-        .modal-70 {
-          background-color: #ffffff;
-          width: 100%;
-          max-width: 1000px;
-          border-radius: 12px;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-          display: flex;
-          flex-direction: column;
-          max-height: 90vh;
-        }
-        
+        .modal-overlay-centered { position: fixed; inset: 0; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px; box-sizing: border-box; }
+        .modal-70 { background-color: #ffffff; width: 100%; max-width: 1000px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); display: flex; flex-direction: column; max-height: 90vh; }
         @media (min-width: 769px) { .modal-70 { width: 70%; } }
-
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
-
         @media (max-width: 768px) {
           .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
           .responsive-table thead { display: none; }
-          .responsive-table tr {
-            display: flex; flex-direction: column; border: 1px solid #e5e7eb; border-radius: 12px;
-            margin-bottom: 16px; padding: 16px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-          }
-          .responsive-table td {
-            display: flex; justify-content: space-between; alignItems: center; padding: 10px 0;
-            border-bottom: 1px solid #f1f5f9; text-align: right; white-space: normal !important;
-          }
+          .responsive-table tr { display: flex; flex-direction: column; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 16px; padding: 16px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+          .responsive-table td { display: flex; justify-content: space-between; alignItems: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; text-align: right; white-space: normal !important; }
           .responsive-table td:last-child { border-bottom: none; padding-bottom: 0; }
-          .responsive-table td::before {
-            content: attr(data-label); font-weight: 700; color: #6b7280; font-size: 0.75rem;
-            text-transform: uppercase; letter-spacing: 0.5px;
-          }
+          .responsive-table td::before { content: attr(data-label); font-weight: 700; color: #6b7280; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
           .mobile-client-cell { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
         }
       `}</style>
@@ -537,7 +479,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       </header>
 
       {/* KPI CARDS */}
-      <div className="dash-grid">
+      <div className="dash-grid" style={s.dashGrid}>
         {isLoading ? (
           <div style={{ color: '#6b7280' }}>Loading metrics...</div>
         ) : (
@@ -557,10 +499,10 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         )}
       </div>
 
-      <div className="main-columns">
+      <div className="main-columns" style={s.mainColumns}>
 
         {/* LEFT COLUMN: DAILY JOBS */}
-        <div className="left-col">
+        <div className="left-col" style={{ flex: '1 1 600px' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'visible' }}>
             <div style={s.tableHeader}>
               <div>
@@ -568,7 +510,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
-              <div className="dashboard-filters">
+              <div className="dashboard-filters" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
                 <button onClick={() => setActiveFilter('All')} style={s.pillBtn(activeFilter === 'All')}>All</button>
                 {statuses.map(st => (
                   <button key={st.id} onClick={() => setActiveFilter(st.name)} style={s.pillBtn(activeFilter === st.name)}>
@@ -600,11 +542,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     const serviceName = getRelationName(services, prop.serviceId, 'Regular');
 
                     return (
-                      <tr
-                        key={prop.id}
-                        onClick={() => handleOpenDetail(prop)}
-                        style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
-                      >
+                      <tr key={prop.id} onClick={() => handleOpenDetail(prop)} style={{ cursor: 'pointer', transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                         <td data-label="Actions" style={s.td}>
                           <div style={{ display: 'flex', gap: '4px' }}>
                             <button onClick={(e) => { e.stopPropagation(); handleOpenForm(prop); }} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px', display: 'flex' }}><Edit2 size={16} /></button>
@@ -614,9 +552,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                         <td data-label="Client" style={s.td}>
                           <div className="mobile-client-cell">
                             <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{prop.client}</div>
-                            <div style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <MapPin size={12} /> {prop.address}
-                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={12} /> {prop.address}</div>
                           </div>
                         </td>
                         <td data-label="Time" style={{ ...s.td, color: '#6b7280' }}><Clock size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} /> {prop.timeIn || '08:00 AM'}</td>
@@ -635,10 +571,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
 
         {/* RIGHT COLUMN: ACTIVE TEAMS */}
-        <div className="right-col">
+        <div className="right-col" style={{ flex: '1 1 300px', maxWidth: '400px' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', padding: '20px' }}>
             <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Active Teams</h3>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {isLoading ? (
                 <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Loading teams...</div>
@@ -671,7 +606,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       </div>
 
-      {/* --- FORM MODAL (3 COLUMN GRID) --- */}
+      {/* --- FORM MODAL --- */}
       {isFormModalOpen && (
         <div className="modal-overlay-centered" onClick={handleCloseForm}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -784,7 +719,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
       )}
 
-      {/* --- DETAIL MODAL WITH PHOTOS & DUPLICATE --- */}
+      {/* --- DETAIL MODAL --- */}
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
@@ -865,7 +800,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
                 {/* PHOTO SECTIONS */}
                 <div className="col-span-full" style={{ marginTop: '10px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                     <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <span style={s.detailLabel}><ImageIcon size={14} /> BEFORE PHOTOS</span>
