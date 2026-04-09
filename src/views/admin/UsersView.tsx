@@ -1,26 +1,83 @@
 import { useState } from 'react';
-import { Plus, Edit2, Trash2, X, User, Mail, Phone, ShieldCheck, Search } from 'lucide-react'; // CheckCircle eliminado de aquí
+import { Plus, Edit2, Trash2, X, User, Mail, Phone, ShieldCheck, Search } from 'lucide-react';
 import type { SystemUser, Role } from '../../types/index';
 import { usersService } from '../../services/usersService';
 
-// --- CUSTOM SELECTOR ---
+// --- CUSTOM SELECTOR CORREGIDO ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
   const [isOpen, setIsOpen] = useState(false);
+  
+  // Buscamos el rol seleccionado para mostrar su nombre
   const selected = options.find((o: any) => o.id === value);
 
   return (
-    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
-      <div onClick={() => setIsOpen(!isOpen)} style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: '#0f172a' }}>
+    <div 
+      tabIndex={0} 
+      onBlur={() => setTimeout(() => setIsOpen(false), 200)} 
+      style={{ position: 'relative', width: '100%', outline: 'none' }}
+    >
+      <div 
+        onClick={() => setIsOpen(!isOpen)} 
+        style={{ 
+          backgroundColor: '#ffffff', 
+          padding: '12px 14px 12px 40px', 
+          border: '1px solid #cbd5e1', 
+          borderRadius: '8px', 
+          fontSize: '0.95rem', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          cursor: 'pointer', 
+          color: '#0f172a',
+          minHeight: '45px'
+        }}
+      >
         <Icon size={16} color="#64748b" style={{ position: 'absolute', left: '14px' }} />
-        <span style={{ color: selected ? '#0f172a' : '#94a3b8' }}>{selected ? selected.name : placeholder}</span>
+        <span style={{ color: selected ? '#0f172a' : '#94a3b8' }}>
+          {selected ? selected.name : placeholder}
+        </span>
+        <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{isOpen ? '▲' : '▼'}</span>
       </div>
+
       {isOpen && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, width: '100%', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', zIndex: 1000, marginTop: '4px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
-          {options.map((o: any) => (
-            <div key={o.id} onMouseDown={() => { onChange(o.id); setIsOpen(false); }} style={{ padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid #f8fafc', color: '#0f172a' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-              {o.name}
-            </div>
-          ))}
+        <div style={{ 
+          position: 'absolute', 
+          top: '105%', 
+          left: 0, 
+          width: '100%', 
+          background: 'white', 
+          border: '1px solid #e5e7eb', 
+          borderRadius: '8px', 
+          zIndex: 9999, 
+          marginTop: '4px', 
+          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+          maxHeight: '200px',
+          overflowY: 'auto'
+        }}>
+          {options.length === 0 ? (
+            <div style={{ padding: '12px', color: '#94a3b8', fontSize: '0.9rem' }}>No roles found</div>
+          ) : (
+            options.map((o: any) => (
+              <div 
+                key={o.id} 
+                onClick={() => { 
+                  onChange(o.id); 
+                  setIsOpen(false); 
+                }} 
+                style={{ 
+                  padding: '12px 14px', 
+                  cursor: 'pointer', 
+                  borderBottom: '1px solid #f8fafc', 
+                  color: '#0f172a',
+                  backgroundColor: value === o.id ? '#f1f5f9' : 'transparent'
+                }} 
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} 
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = value === o.id ? '#f1f5f9' : 'transparent'}
+              >
+                {o.name}
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -30,6 +87,7 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
 export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
   const [users, setUsers] = useState<SystemUser[]>([]);
   
+  // Estos son los roles disponibles para el selector
   const [roles] = useState<Role[]>([
     { id: 'r1', name: 'Administrator', description: '', permissions: [] },
     { id: 'r2', name: 'Employee', description: '', permissions: [] }
@@ -37,7 +95,9 @@ export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState<SystemUser>({ id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' });
+  const [formData, setFormData] = useState<SystemUser>({ 
+    id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' 
+  });
 
   const handleOpenForm = (user?: SystemUser) => {
     setFormData(user || { id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' });
@@ -170,7 +230,14 @@ export default function UsersView({ onOpenMenu }: { onOpenMenu: () => void }) {
                 </div>
                 <div>
                   <label style={s.label}>Assign Role *</label>
-                  <CustomSelect options={roles} value={formData.roleId} onChange={(val: string) => setFormData({...formData, roleId: val})} placeholder="Select a role..." icon={ShieldCheck} />
+                  {/* AQUÍ ESTÁ EL SELECTOR CORREGIDO */}
+                  <CustomSelect 
+                    options={roles} 
+                    value={formData.roleId} 
+                    onChange={(val: string) => setFormData({...formData, roleId: val})} 
+                    placeholder="Select a role..." 
+                    icon={ShieldCheck} 
+                  />
                 </div>
               </div>
             </div>
