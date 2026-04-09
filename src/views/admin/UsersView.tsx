@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, X, User, Mail, Phone, ShieldCheck, Search } from 'lucide-react'; // Edit2 eliminado
+import { Plus, Trash2, X, User, Mail, Phone, ShieldCheck, Search } from 'lucide-react';
 import type { SystemUser, Role } from '../../types/index';
 import { usersService } from '../../services/usersService';
+// IMPORTAMOS FIREBASE DIRECTAMENTE
 import { db } from '../../config/firebase';
 import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
 
@@ -17,16 +18,56 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
     >
       <div 
         onClick={() => setIsOpen(!isOpen)} 
-        style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: '#0f172a', minHeight: '45px' }}
+        style={{ 
+          backgroundColor: '#ffffff', 
+          padding: '12px 14px 12px 40px', 
+          border: '1px solid #cbd5e1', 
+          borderRadius: '8px', 
+          fontSize: '0.95rem', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          cursor: 'pointer', 
+          color: '#0f172a',
+          minHeight: '45px'
+        }}
       >
         <Icon size={16} color="#64748b" style={{ position: 'absolute', left: '14px' }} />
-        <span style={{ color: selected ? '#0f172a' : '#94a3b8' }}>{selected ? selected.name : placeholder}</span>
+        <span style={{ color: selected ? '#0f172a' : '#94a3b8' }}>
+          {selected ? selected.name : placeholder}
+        </span>
         <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{isOpen ? '▲' : '▼'}</span>
       </div>
+
       {isOpen && (
-        <div style={{ position: 'absolute', top: '105%', left: 0, width: '100%', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', zIndex: 9999, marginTop: '4px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', maxHeight: '200px', overflowY: 'auto' }}>
+        <div style={{ 
+          position: 'absolute', 
+          top: '105%', 
+          left: 0, 
+          width: '100%', 
+          background: 'white', 
+          border: '1px solid #e5e7eb', 
+          borderRadius: '8px', 
+          zIndex: 9999, 
+          marginTop: '4px', 
+          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+          maxHeight: '200px',
+          overflowY: 'auto'
+        }}>
           {options.map((o: any) => (
-            <div key={o.id} onClick={() => { onChange(o.id); setIsOpen(false); }} style={{ padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid #f8fafc', color: '#0f172a', backgroundColor: value === o.id ? '#f1f5f9' : 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.backgroundColor = value === o.id ? '#f1f5f9' : 'transparent'}>
+            <div 
+              key={o.id} 
+              onClick={() => { onChange(o.id); setIsOpen(false); }} 
+              style={{ 
+                padding: '12px 14px', 
+                cursor: 'pointer', 
+                borderBottom: '1px solid #f8fafc', 
+                color: '#0f172a',
+                backgroundColor: value === o.id ? '#f1f5f9' : 'transparent'
+              }} 
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} 
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = value === o.id ? '#f1f5f9' : 'transparent'}
+            >
               {o.name}
             </div>
           ))}
@@ -46,19 +87,18 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState<SystemUser>({ id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' });
+  const [formData, setFormData] = useState<SystemUser>({ 
+    id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' 
+  });
 
-  // Cargar usuarios de Firebase al iniciar
+  // Cargar usuarios DIRECTO desde Firebase
   useEffect(() => {
     const fetchUsers = async () => {
       setIsLoading(true);
       try {
         const querySnapshot = await getDocs(collection(db, 'system_users'));
-        const usersList: SystemUser[] = [];
-        querySnapshot.forEach((doc) => {
-          usersList.push({ id: doc.id, ...doc.data() } as SystemUser);
-        });
-        setUsers(usersList);
+        const loadedUsers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SystemUser));
+        setUsers(loadedUsers);
       } catch (error) {
         console.error("Error cargando usuarios:", error);
       } finally {
@@ -68,44 +108,45 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
     fetchUsers();
   }, []);
 
-  const handleOpenForm = (user?: SystemUser) => {
-    setFormData(user || { id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' });
+  const handleOpenForm = () => {
+    setFormData({ id: '', firstName: '', lastName: '', email: '', phone: '', altPhone: '', roleId: '', status: 'Pending Invite' });
     setIsModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (!formData.email || !formData.roleId) return alert("Please fill in Email and Role.");
+    if (!formData.email || !formData.roleId) {
+      return alert("Please fill in Email and Role.");
+    }
     
     setIsSaving(true);
     try {
-      if (formData.id) {
-        // En una futura mejora: crear lógica de updateUser en usersService
-        alert("Editing users directly is restricted. Please delete and re-invite if needed.");
-        setIsModalOpen(false);
-      } else {
-        const newUserId = await usersService.inviteUser({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email.toLowerCase().trim(),
-          phone: formData.phone,
-          altPhone: formData.altPhone || '',
-          roleId: formData.roleId,
-          status: 'Pending Invite'
-        });
-        setUsers(prev => [...prev, { ...formData, id: newUserId, status: 'Pending Invite' }]);
-        alert(`✅ Success! Invitation sent to ${formData.email}.`);
-        setIsModalOpen(false);
-      }
+      // El servicio inviteUser maneja tanto Firestore como Auth
+      const newUserId = await usersService.inviteUser({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email.toLowerCase().trim(),
+        phone: formData.phone,
+        altPhone: formData.altPhone || '',
+        roleId: formData.roleId,
+        status: 'Pending Invite'
+      });
+      
+      setUsers(prev => [...prev, { ...formData, id: newUserId, status: 'Pending Invite' }]);
+      alert(`✅ Success! Invitation sent to ${formData.email}.`);
+      setIsModalOpen(false);
     } catch (error: any) {
-      console.error("Error completo al guardar:", error);
-      if (error.code === 'permission-denied') alert("❌ Firebase Error: Access Denied. Check your Firestore Rules.");
-      else alert("❌ Error: Could not send invitation. Please check the console.");
+      console.error("Error al invitar:", error);
+      if (error.code === 'permission-denied') {
+        alert("❌ Firebase Error: Access Denied. Check your Firestore Rules.");
+      } else {
+        alert("❌ Error: Could not send invitation. Please check the console.");
+      }
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Eliminar usuario
+  // Eliminar usuario DIRECTO de Firebase
   const handleDeleteUser = async (id: string) => {
     if(window.confirm("Are you sure you want to remove this user's access?")) {
       setIsSaving(true);
@@ -183,7 +224,7 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
           <div style={{ backgroundColor: 'white', width: '100%', maxWidth: '700px', borderRadius: '16px', display: 'flex', flexDirection: 'column', maxHeight: '90vh', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
             <header style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#0f172a' }}>{formData.id ? 'Edit User' : 'Invite User'}</h3>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#0f172a' }}>Invite User</h3>
               <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={24} /></button>
             </header>
             
@@ -219,7 +260,13 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
                 </div>
                 <div>
                   <label style={s.label}>Assign Role *</label>
-                  <CustomSelect options={roles} value={formData.roleId} onChange={(val: string) => setFormData({...formData, roleId: val})} placeholder="Select a role..." icon={ShieldCheck} />
+                  <CustomSelect 
+                    options={roles} 
+                    value={formData.roleId} 
+                    onChange={(val: string) => setFormData({...formData, roleId: val})} 
+                    placeholder="Select a role..." 
+                    icon={ShieldCheck} 
+                  />
                 </div>
               </div>
             </div>
@@ -227,7 +274,7 @@ export default function UsersView({ onOpenMenu, roles }: UsersViewProps) {
             <footer style={{ padding: '20px 24px', borderTop: '1px solid #f1f5f9', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: '12px', borderRadius: '0 0 16px 16px' }}>
               <button type="button" onClick={() => setIsModalOpen(false)} style={s.btnCancel}>Cancel</button>
               <button onClick={handleSave} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#2563eb', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: 600, cursor: isSaving ? 'wait' : 'pointer', opacity: isSaving ? 0.7 : 1 }}>
-                {isSaving ? 'Processing...' : (formData.id ? 'Update' : 'Invite')}
+                {isSaving ? 'Processing...' : 'Invite'}
               </button>
             </footer>
           </div>
