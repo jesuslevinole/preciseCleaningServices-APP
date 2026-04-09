@@ -18,11 +18,9 @@ const collectionMap: Record<string, string> = {
   service: 'settings_services',
 };
 
-// --- CUSTOM COMPONENTS & HELPERS (A Prueba de Balas) ---
+// --- CUSTOM COMPONENTS & HELPERS ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  
-  // Búsqueda inteligente: ignora mayúsculas y espacios para compatibilidad con registros viejos
   const safeValue = String(value || '').toLowerCase().trim();
   const selected = options.find((o: any) => 
     String(o.id).toLowerCase().trim() === safeValue || 
@@ -68,37 +66,87 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
   );
 };
 
-// Funciones de mapeo seguras
+// Inline Status Pill Selector
+const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: { currentStatusId: string, statuses: Status[], onChange: (id: string) => void, disabled: boolean }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const safeValue = String(currentStatusId || '').toLowerCase().trim();
+  const status = statuses.find(s => String(s.id).toLowerCase().trim() === safeValue || String(s.name).toLowerCase().trim() === safeValue);
+  
+  const bg = status ? `${status.color}15` : '#f1f5f9';
+  const color = status ? status.color : '#64748b';
+  const text = status ? status.name : 'Unassigned';
+
+  return (
+    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', display: 'inline-block', outline: 'none' }}>
+      <div 
+        onClick={(e) => { e.stopPropagation(); if(!disabled) setIsOpen(!isOpen); }}
+        style={{ 
+          backgroundColor: bg, color: color, padding: '4px 10px', borderRadius: '12px', 
+          fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px',
+          cursor: disabled ? 'not-allowed' : 'pointer', border: `1px solid ${color}30`, transition: 'all 0.2s'
+        }}
+      >
+        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: color }}></span>
+        {text}
+        <ChevronDown size={12} style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+      </div>
+
+      {isOpen && (
+        <div style={{ 
+          position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'white', 
+          border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', 
+          zIndex: 9999, minWidth: '160px', overflow: 'hidden', textAlign: 'left'
+        }}>
+          {statuses.map((s) => (
+            <div 
+              key={s.id}
+              onMouseDown={(e) => { 
+                e.preventDefault(); 
+                e.stopPropagation();
+                if(s.id !== currentStatusId && s.name !== currentStatusId) onChange(s.id); 
+                setIsOpen(false); 
+              }}
+              style={{ 
+                padding: '10px 14px', fontSize: '0.8rem', fontWeight: 600, color: s.color, 
+                display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
+                backgroundColor: (currentStatusId === s.id || currentStatusId === s.name) ? `${s.color}15` : 'transparent'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = (currentStatusId === s.id || currentStatusId === s.name) ? `${s.color}15` : 'transparent'}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: s.color }}></span>
+              {s.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const getRelationName = (list: any[], idOrName: string, fallback = '-') => {
   if (!idOrName) return fallback;
   const safeVal = String(idOrName).toLowerCase().trim();
-  const found = list.find(item => 
-    String(item.id).toLowerCase().trim() === safeVal || 
-    String(item.name).toLowerCase().trim() === safeVal
-  );
+  const found = list.find(item => String(item.id).toLowerCase().trim() === safeVal || String(item.name).toLowerCase().trim() === safeVal);
   return found ? found.name : fallback;
 };
 
 const getRelationColor = (list: any[], idOrName: string) => {
   if (!idOrName) return undefined;
   const safeVal = String(idOrName).toLowerCase().trim();
-  return list.find(item => 
-    String(item.id).toLowerCase().trim() === safeVal || 
-    String(item.name).toLowerCase().trim() === safeVal
-  )?.color;
+  return list.find(item => String(item.id).toLowerCase().trim() === safeVal || String(item.name).toLowerCase().trim() === safeVal)?.color;
 };
 
-// 1. CORRECCIÓN DEL BUILD: Agregamos properties como opcional para evitar el error TS2322 en App.tsx
 interface CalendarViewProps {
   onOpenMenu: () => void;
   onCheckHouse?: (house: Property) => void;
-  properties?: Property[]; // Ignoraremos esto internamente, pero silenciará la queja de TypeScript
+  properties?: Property[]; 
 }
 
 export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewProps) {
   
   // --- FIREBASE STATES ---
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [propertiesList, setPropertiesList] = useState<Property[]>([]);
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [priorities, setPriorities] = useState<Priority[]>([]);
@@ -133,7 +181,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
           customersService.getAll() 
         ]);
 
-        if (propsData) setProperties(propsData);
+        if (propsData) setPropertiesList(propsData);
         if (statusData) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
         if (teamData) setTeams(teamData as Team[]);
         if (prioData) setPriorities(prioData as Priority[]);
@@ -169,8 +217,11 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
   };
 
   const calendarDays = getDaysInMonth(currentDate);
-  const monthName = currentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  // Date format dynamically adapted to the user's explicit rules:
+  const monthNameRaw = currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+  const monthName = monthNameRaw.charAt(0).toUpperCase() + monthNameRaw.slice(1);
+  const weekDays = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
   // --- MODAL HANDLERS ---
   const handleOpenForm = (house?: Property, defaultDate?: string) => {
@@ -203,6 +254,22 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
     }
   };
 
+  const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
+    setIsSaving(true);
+    try {
+      await propertiesService.update(propertyId, { statusId: newStatusId });
+      setPropertiesList(propertiesList.map(p => p.id === propertyId ? { ...p, statusId: newStatusId } : p));
+      if (selectedHouse && selectedHouse.id === propertyId) {
+        setSelectedHouse({ ...selectedHouse, statusId: newStatusId });
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to update job status.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!formData.client) return alert("Client is required.");
     if (!formData.address) return alert("Address is required.");
@@ -212,7 +279,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
       if (selectedHouse && selectedHouse.id) {
         const { id, ...dataToUpdate } = formData; 
         await propertiesService.update(selectedHouse.id, dataToUpdate);
-        setProperties(properties.map(p => p.id === selectedHouse.id ? { ...formData } : p));
+        setPropertiesList(propertiesList.map(p => p.id === selectedHouse.id ? { ...formData } : p));
       } else {
         const { id, ...dataToAdd } = formData; 
         const completeData = {
@@ -221,7 +288,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
           city: 'TBD', size: 'TBD'
         };
         const newId = await propertiesService.create(completeData as unknown as Omit<Property, 'id'>);
-        setProperties([...properties, { ...formData, id: newId, description: completeData.description, city: completeData.city, size: completeData.size }]);
+        setPropertiesList([...propertiesList, { ...formData, id: newId, description: completeData.description, city: completeData.city, size: completeData.size }]);
       }
       handleCloseForm();
     } catch (error) {
@@ -237,7 +304,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
     setIsSaving(true);
     try {
       await propertiesService.delete(selectedHouse.id);
-      setProperties(properties.filter(p => p.id !== selectedHouse.id));
+      setPropertiesList(propertiesList.filter(p => p.id !== selectedHouse.id));
       setIsDetailModalOpen(false);
     } catch (error) {
       console.error("Error deleting:", error);
@@ -256,7 +323,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
     modal70: { backgroundColor: '#ffffff', width: '100%', maxWidth: '1000px', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' } as React.CSSProperties,
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
-    body: { padding: '30px', overflowY: 'auto' } as React.CSSProperties,
+    body: { padding: '30px', overflowY: 'auto', paddingBottom: '60px' } as React.CSSProperties,
     footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
     label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' } as React.CSSProperties,
@@ -319,7 +386,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'white', padding: '6px 12px', borderRadius: '24px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
           <button onClick={prevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronLeft size={20}/></button>
-          <span style={{ fontWeight: 700, color: '#1e293b', minWidth: '130px', textAlign: 'center' }}>{monthName}</span>
+          <span style={{ fontWeight: 700, color: '#1e293b', minWidth: '130px', textAlign: 'center', textTransform: 'capitalize' }}>{monthName}</span>
           <button onClick={nextMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronRight size={20}/></button>
         </div>
       </header>
@@ -336,11 +403,17 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
             {calendarDays.map((date, index) => {
               if (!date) return <div key={`empty-${index}`} className="calendar-day-cell empty"></div>;
               
-              const offset = date.getTimezoneOffset()
-              const localDate = new Date(date.getTime() - (offset*60*1000))
-              const dateString = localDate.toISOString().split('T')[0]
+              // BULLETPROOF DATE FORMATTING: Evita problemas de zona horaria aislando año, mes y día.
+              const yyyy = date.getFullYear();
+              const mm = String(date.getMonth() + 1).padStart(2, '0');
+              const dd = String(date.getDate()).padStart(2, '0');
+              const dateString = `${yyyy}-${mm}-${dd}`;
               
-              const dailyJobs = properties.filter(p => p.scheduleDate === dateString);
+              // Lógica Fallback de UX: Si el usuario no programó scheduleDate, mostramos el receiveDate para no perder el trabajo.
+              const dailyJobs = propertiesList.filter(p => {
+                const jobDate = p.scheduleDate || p.receiveDate;
+                return jobDate === dateString;
+              });
 
               return (
                 <div key={dateString} className="calendar-day-cell">
@@ -460,7 +533,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
                 
                 <div>
                   <label style={s.label}>Bathrooms</label>
-                  <CustomSelect options={roomOptions} value={formData.rooms} onChange={(val: string) => setFormData({ ...formData, bathrooms: val })} placeholder="Bathrooms..." icon={Hash} />
+                  <CustomSelect options={roomOptions} value={formData.bathrooms} onChange={(val: string) => setFormData({ ...formData, bathrooms: val })} placeholder="Bathrooms..." icon={Hash} />
                 </div>
 
                 <div className="col-span-full">
@@ -513,9 +586,13 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
 
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    <span style={{ backgroundColor: getRelationColor(statuses, selectedHouse.statusId) || '#ccc', width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
-                    <span style={s.detailValue}>{getRelationName(statuses, selectedHouse.statusId, 'UNASSIGNED')}</span>
+                  <div style={{ marginTop: '4px' }}>
+                    <StatusPillSelector 
+                      currentStatusId={selectedHouse.statusId} 
+                      statuses={statuses} 
+                      onChange={(newId: string) => handleQuickStatusChange(selectedHouse.id, newId)} 
+                      disabled={isSaving} 
+                    />
                   </div>
                 </div>
                 <div style={s.detailItem}>
@@ -602,7 +679,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
                 >
                   <ClipboardCheck size={16} /> Quality Check
                 </button>
-                
+
                 <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>
               </div>
             </footer>
