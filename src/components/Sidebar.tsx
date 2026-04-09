@@ -1,6 +1,6 @@
 import { 
   Building2, Home, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen, Users, CalendarDays,
-  ShieldCheck, UserPlus, UserCircle, RefreshCcw 
+  ShieldCheck, UserPlus 
 } from 'lucide-react';
 
 // Centralizamos las opciones de pestañas
@@ -12,14 +12,10 @@ interface SidebarProps {
   activeTab: TabOptions;
   setActiveTab: (tab: TabOptions) => void;
   onSettingsClick: () => void;
-  simulationRole: string | null;
-  setSimulationRole: (roleId: string | null) => void;
-  roles: any[];
 }
 
 export default function Sidebar({ 
-  isSidebarOpen, setIsSidebarOpen, activeTab, setActiveTab, onSettingsClick,
-  simulationRole, setSimulationRole, roles 
+  isSidebarOpen, setIsSidebarOpen, activeTab, setActiveTab, onSettingsClick 
 }: SidebarProps) {
   
   return (
@@ -71,30 +67,6 @@ export default function Sidebar({
           <SettingsIcon size={20} className="nav-icon" />
           {isSidebarOpen && <span className="nav-text">Settings</span>}
         </button>
-
-        {/* --- SIMULADOR DE ROLES --- */}
-        <div style={{ marginTop: 'auto', padding: '16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          {isSidebarOpen && <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, marginBottom: '8px' }}>SIMULATE VIEW</div>}
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <button 
-              onClick={() => setSimulationRole(null)}
-              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', backgroundColor: simulationRole === null ? '#2563eb' : 'transparent', color: 'white', width: '100%' }}
-            >
-              <UserCircle size={16} /> {isSidebarOpen && "Real Identity"}
-            </button>
-
-            {roles.map(r => (
-              <button 
-                key={r.id}
-                onClick={() => setSimulationRole(r.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', backgroundColor: simulationRole === r.id ? '#f59e0b' : 'transparent', color: 'white', width: '100%' }}
-              >
-                <RefreshCcw size={14} /> {isSidebarOpen && `As ${r.name}`}
-              </button>
-            ))}
-          </div>
-        </div>
       </nav>
     </aside>
   );

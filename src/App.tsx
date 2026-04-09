@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import HousesView from './views/HousesView';
 import CustomersView from './views/CustomersView';
@@ -24,15 +24,6 @@ export default function App() {
   const [houseToInspect, setHouseToInspect] = useState<Property | null>(null);
 
   const [roles, setRoles] = useState<Role[]>([]);
-  const [simulationRole, setSimulationRole] = useState<string | null>(null);
-
-  const activeRoleId = useMemo(() => simulationRole || "", [simulationRole]);
-
-  const visibleProperties = useMemo(() => {
-    const currentRole = roles.find(r => r.id === activeRoleId);
-    if (currentRole?.name === 'Administrator') return properties;
-    return properties; 
-  }, [properties, activeRoleId, roles]);
 
   const handleSettingsClick = () => {
     setActiveTab('settings');
@@ -50,32 +41,30 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {/* El Sidebar ya no recibe las props de simulación */}
       <Sidebar 
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         activeTab={activeTab}
         setActiveTab={setActiveTab} 
         onSettingsClick={handleSettingsClick}
-        simulationRole={simulationRole}
-        setSimulationRole={setSimulationRole}
-        roles={roles}
       />
 
       <main className="main-content">
         {activeTab === 'houses' && (
           <HousesView 
-            properties={visibleProperties as any} 
+            properties={properties as any} 
             setProperties={setProperties as any} 
             onOpenMenu={() => setIsSidebarOpen(true)} 
             onCheckHouse={handleCheckHouse} 
           />
         )}
         
-        {activeTab === 'calendar' && <CalendarView properties={visibleProperties as any} onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {activeTab === 'calendar' && <CalendarView properties={properties as any} onOpenMenu={() => setIsSidebarOpen(true)} />}
         
         {activeTab === 'qc_report' && (
           <QualityCheckView 
-            properties={visibleProperties as any} 
+            properties={properties as any} 
             onOpenMenu={() => setIsSidebarOpen(true)} 
             houseToInspect={houseToInspect as any}
             clearHouseToInspect={() => setHouseToInspect(null)}
