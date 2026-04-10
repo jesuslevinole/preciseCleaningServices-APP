@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Search, MapPin, Plus, X, Edit2, Trash2, 
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
-  Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare
+  Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck
 } from 'lucide-react';
 
 import type { Property, Status, Team, Priority, Service, Customer } from '../types/index';
@@ -158,12 +158,15 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
   
+  // NUEVO ESTADO: Para el modal de resumen de un equipo
+  const [selectedTeamView, setSelectedTeamView] = useState<Team | null>(null);
+  
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [priorities, setPriorities] = useState<Priority[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [customersList, setCustomersList] = useState<Customer[]>([]); 
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]); 
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -172,7 +175,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '',
     beforePhotos: [], afterPhotos: [],
-    assignedWorkers: []
+    assignedWorkers: [] 
   });
 
   const [beforePhotoURLs, setBeforePhotoURLs] = useState<string[]>([]);
@@ -193,7 +196,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           settingsService.getAll(collectionMap.priority).catch(e => { console.error("Error Priorities:", e); return []; }),
           settingsService.getAll(collectionMap.service).catch(e => { console.error("Error Services:", e); return []; }),
           customersService.getAll().catch(e => { console.error("Error Customers:", e); return []; }),
-          // CORRECCIÓN DE LA ALERTA (ts6133):
           getDocs(collection(db, 'system_users')).then(snap => snapshotToData(snap)).catch(() => []) 
         ]);
 
@@ -472,8 +474,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
   const kpiIcons = [Briefcase, Clock, ShieldCheck, AlertTriangle];
 
+  // Fecha en español
   const today = new Date();
-  const dateFormatted = today.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateFormatted = today.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const dateCapitalized = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1);
 
   return (
@@ -626,7 +629,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 teams.map(team => {
                   const assignedProps = properties.filter(p => p.teamId === team.id || p.teamId === team.name);
                   return (
-                    <div key={team.id} style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                    <div 
+                      key={team.id} 
+                      onClick={() => setSelectedTeamView(team)}
+                      style={{ border: '1px solid #f1f5f9', padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc', cursor: 'pointer', transition: 'all 0.2s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = team.color; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.boxShadow = 'none'; }}
+                    >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: `${team.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: team.color }}><Users size={18} /></div>
@@ -967,6 +976,92 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           </div>
         </div>
       )}
+
+      {/* --- NUEVO: TEAM OVERVIEW MODAL --- */}
+      {selectedTeamView && (
+        <div className="modal-overlay-centered" onClick={() => setSelectedTeamView(null)}>
+          <div className="modal-70" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+            <header style={s.header}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: `${selectedTeamView.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: selectedTeamView.color }}>
+                  <Users size={16} />
+                </div>
+                <h3 style={s.title}>{selectedTeamView.name} Overview</h3>
+              </div>
+              <button style={s.closeBtn} onClick={() => setSelectedTeamView(null)}><X size={20} /></button>
+            </header>
+            
+            <div style={s.body}>
+              
+              {/* Sección de Empleados */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', color: '#111827', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <UserCheck size={16} color="#3b82f6" /> Team Members
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {employees.filter(e => e.teamId === selectedTeamView.id).length === 0 ? (
+                    <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', color: '#64748b', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                      No employees assigned to this team.
+                    </div>
+                  ) : (
+                    employees.filter(e => e.teamId === selectedTeamView.id).map(emp => (
+                      <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#e0f2fe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>
+                          {emp.firstName.charAt(0)}{emp.lastName.charAt(0)}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.95rem' }}>{emp.firstName} {emp.lastName}</div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{emp.email}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Sección de Trabajos del Día */}
+              <div style={{ marginTop: '16px' }}>
+                <h4 style={{ margin: '0 0 12px 0', color: '#111827', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Briefcase size={16} color="#f59e0b" /> Assigned Jobs Today
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {properties.filter(p => p.teamId === selectedTeamView.id).length === 0 ? (
+                    <div style={{ padding: '12px', backgroundColor: '#fffbeb', borderRadius: '8px', color: '#b45309', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                      No jobs assigned for today.
+                    </div>
+                  ) : (
+                    properties.filter(p => p.teamId === selectedTeamView.id).map(prop => (
+                      <div key={prop.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.95rem', marginBottom: '2px' }}>{prop.client}</div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <MapPin size={12} /> {prop.address}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.8rem', color: '#111827', fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                            <Clock size={12} color="#64748b" /> {prop.timeIn || '08:00 AM'}
+                          </div>
+                          {statuses.find(s => s.id === prop.statusId) ? (
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', color: '#475569' }}>
+                              {statuses.find(s => s.id === prop.statusId)?.name}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+            </div>
+            <footer style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button style={s.btnOutline} onClick={() => setSelectedTeamView(null)}>Close</button>
+            </footer>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
