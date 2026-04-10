@@ -171,7 +171,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAssigningWorker, setIsAssigningWorker] = useState(false);
+  const [isAssigningWorker, setIsAssigningWorker] = useState(false); // Modal Detalles
+  const [isAssigningWorkerForm, setIsAssigningWorkerForm] = useState(false); // Modal Formulario
 
   const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '',
@@ -273,8 +274,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  const toggleWorkerAssignment = async (workerId: string) => {
-    if (!selectedHouse || !canEdit) return; // Validación de permisos
+  const toggleWorkerAssignmentDetail = async (workerId: string) => {
+    if (!selectedHouse || !canEdit) return;
     setIsSaving(true);
 
     try {
@@ -300,6 +301,18 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const toggleWorkerAssignmentForm = (workerId: string) => {
+    const currentWorkers = formData.assignedWorkers || [];
+    const isAssigned = currentWorkers.includes(workerId);
+    let newWorkersList;
+    if (isAssigned) {
+      newWorkersList = currentWorkers.filter(id => id !== workerId);
+    } else {
+      newWorkersList = [...currentWorkers, workerId];
+    }
+    setFormData({ ...formData, assignedWorkers: newWorkersList });
   };
 
   const s = {
@@ -339,6 +352,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   };
 
   const handleOpenForm = (house?: Property) => {
+    setIsAssigningWorkerForm(false); // Reinicia el desplegable
     if (house) {
       setFormData(house);
     } else {
@@ -380,10 +394,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       let workingId = formData.id;
       let isNew = false;
       
-      let finalAssignedWorkers = formData.assignedWorkers || [];
-      if (formData.teamId && finalAssignedWorkers.length === 0) {
-        finalAssignedWorkers = employees.filter(emp => emp.teamId === formData.teamId).map(emp => emp.id);
-      }
+      const finalAssignedWorkers = formData.assignedWorkers || [];
 
       if (!workingId) {
         const { id, ...restOfData } = formData;
@@ -553,7 +564,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <Bell size={18} />
           </button>
           
-          {/* Ocultar el botón si el usuario NO tiene permiso de Añadir (canAdd) */}
           {(isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canAdd) && (
             <button className="add-btn-mobile" onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0 }}>
               <Plus size={16} /> New Job
@@ -701,7 +711,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         <div className="modal-overlay-centered" onClick={handleCloseForm}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
-              <h3 style={s.title}>{selectedHouse ? 'Edit Property Details' : 'Register New Property'}</h3>
+              <h3 style={s.title}>{formData.id ? 'Edit Property Details' : 'Register New Property'}</h3>
               <button style={s.closeBtn} onClick={handleCloseForm}><X size={24} /></button>
             </header>
 
@@ -753,7 +763,18 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
                 <div>
                   <label style={s.label}>Team</label>
-                  <CustomSelect options={teams} value={formData.teamId} onChange={(val: string) => setFormData({ ...formData, teamId: val })} placeholder="Assign Team..." icon={Users} />
+                  <CustomSelect 
+                    options={teams} 
+                    value={formData.teamId} 
+                    onChange={(val: string) => {
+                      // AUTO-ASIGNACIÓN: Cuando seleccionan un equipo en el formulario, 
+                      // traemos los empleados de ese equipo como valor inicial a los assignedWorkers
+                      const teamWorkers = employees.filter(emp => emp.teamId === val).map(emp => emp.id);
+                      setFormData({ ...formData, teamId: val, assignedWorkers: teamWorkers });
+                    }} 
+                    placeholder="Assign Team..." 
+                    icon={Users} 
+                  />
                 </div>
 
                 <div>
@@ -778,6 +799,65 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div>
                   <label style={s.label}>Bathrooms</label>
                   <CustomSelect options={roomOptions} value={formData.bathrooms} onChange={(val: string) => setFormData({ ...formData, bathrooms: val })} placeholder="Bathrooms..." icon={Hash} />
+                </div>
+
+                {/* NUEVO: SECCIÓN DE TRABAJADORES ASIGNADOS DENTRO DEL FORMULARIO */}
+                <div className="col-span-full" style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={s.label}><User size={14} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}}/> Assigned Workers</span>
+                    
+                    <div style={{ position: 'relative' }}>
+                      <button 
+                        type="button" // Evita que se envíe el formulario
+                        onClick={() => setIsAssigningWorkerForm(!isAssigningWorkerForm)} 
+                        disabled={isSaving}
+                        style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {isAssigningWorkerForm ? 'Close' : '+ Assign / Remove'}
+                      </button>
+
+                      {isAssigningWorkerForm && (
+                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', width: '250px', zIndex: 10, maxHeight: '200px', overflowY: 'auto' }}>
+                          <div style={{ padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>ALL EMPLOYEES</div>
+                          {employees.map(emp => {
+                            const isAssigned = (formData.assignedWorkers || []).includes(emp.id);
+                            return (
+                              <div 
+                                key={emp.id} 
+                                onClick={() => toggleWorkerAssignmentForm(emp.id)}
+                                style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', backgroundColor: isAssigned ? '#eff6ff' : 'transparent' }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : '#f8fafc'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : 'transparent'}
+                              >
+                                <span style={{ fontSize: '0.85rem', fontWeight: isAssigned ? 600 : 500, color: isAssigned ? '#1e40af' : '#334155' }}>
+                                  {emp.firstName} {emp.lastName}
+                                </span>
+                                {isAssigned && <CheckSquare size={14} color="#3b82f6" />}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {!(formData.assignedWorkers && formData.assignedWorkers.length > 0) ? (
+                      <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic' }}>No workers assigned specifically for this job yet. Select a Team to auto-fill or add manually.</span>
+                    ) : (
+                      formData.assignedWorkers.map(workerId => {
+                        const emp = employees.find(e => e.id === workerId);
+                        if (!emp) return null;
+                        return (
+                          <div key={workerId} style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', padding: '6px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <User size={12} color="#64748b" />
+                            {emp.firstName} {emp.lastName}
+                            <button type="button" onClick={() => toggleWorkerAssignmentForm(workerId)} style={{ background: 'none', border: 'none', padding: 0, margin: 0, marginLeft: '4px', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center' }}><X size={14}/></button>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
                 </div>
 
                 <div className="col-span-full">
@@ -892,12 +972,11 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </div>
                 </div>
 
-                {/* NUEVO: SECCIÓN DE TRABAJADORES ASIGNADOS */}
+                {/* SECCIÓN DE TRABAJADORES ASIGNADOS (MODAL DETALLES) */}
                 <div className="col-span-full" style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <span style={s.detailLabel}><User size={14} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}}/> ASSIGNED WORKERS</span>
                     
-                    {/* Botón para desplegar lista de trabajadores (solo si tiene permisos) */}
                     {canEdit && (
                       <div style={{ position: 'relative' }}>
                         <button 
@@ -916,7 +995,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                               return (
                                 <div 
                                   key={emp.id} 
-                                  onClick={() => toggleWorkerAssignment(emp.id)}
+                                  onClick={() => toggleWorkerAssignmentDetail(emp.id)}
                                   style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', backgroundColor: isAssigned ? '#eff6ff' : 'transparent' }}
                                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : '#f8fafc'}
                                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : 'transparent'}
@@ -945,9 +1024,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                           <div key={workerId} style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', padding: '6px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <User size={12} color="#64748b" />
                             {emp.firstName} {emp.lastName}
-                            {/* Ocultar la X roja si no tiene permisos */}
                             {canEdit && (
-                              <button onClick={() => toggleWorkerAssignment(workerId)} style={{ background: 'none', border: 'none', padding: 0, margin: 0, marginLeft: '4px', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center' }}><X size={14}/></button>
+                              <button onClick={() => toggleWorkerAssignmentDetail(workerId)} style={{ background: 'none', border: 'none', padding: 0, margin: 0, marginLeft: '4px', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center' }}><X size={14}/></button>
                             )}
                           </div>
                         )
