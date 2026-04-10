@@ -16,6 +16,11 @@ export interface Property {
   timeIn: string;
   timeOut: string;
   
+  // Arreglos nuevos para las funcionalidades de la casa
+  assignedWorkers?: string[];
+  beforePhotos?: string[];
+  afterPhotos?: string[];
+  
   // Campos opcionales para las tarjetas iniciales
   city?: string;
   size?: string;

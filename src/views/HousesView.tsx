@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Search, MapPin, Plus, X, Edit2, Trash2, 
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
-  Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy
+  Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare
 } from 'lucide-react';
 
 import type { Property, Status, Team, Priority, Service, Customer } from '../types/index';
@@ -11,6 +11,8 @@ import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
 import { customersService } from '../services/customersService';
 import { storageService } from '../services/storageService';
+import { db } from '../config/firebase';
+import { collection, getDocs } from 'firebase/firestore';
 
 const collectionMap: Record<string, string> = {
   team: 'settings_teams',
@@ -161,13 +163,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [priorities, setPriorities] = useState<Priority[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [customersList, setCustomersList] = useState<Customer[]>([]); 
+  const [employees, setEmployees] = useState<any[]>([]);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAssigningWorker, setIsAssigningWorker] = useState(false);
 
   const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '',
-    beforePhotos: [], afterPhotos: []
+    beforePhotos: [], afterPhotos: [],
+    assignedWorkers: []
   });
 
   const [beforePhotoURLs, setBeforePhotoURLs] = useState<string[]>([]);
@@ -181,13 +186,15 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        const [ propsData, statusData, teamData, prioData, servData, custData ] = await Promise.all([
+        const [ propsData, statusData, teamData, prioData, servData, custData, usersData ] = await Promise.all([
           propertiesService.getAll().catch(e => { console.error("Error Properties:", e); return []; }),
           settingsService.getAll(collectionMap.status).catch(e => { console.error("Error Status:", e); return []; }),
           settingsService.getAll(collectionMap.team).catch(e => { console.error("Error Teams:", e); return []; }),
           settingsService.getAll(collectionMap.priority).catch(e => { console.error("Error Priorities:", e); return []; }),
           settingsService.getAll(collectionMap.service).catch(e => { console.error("Error Services:", e); return []; }),
-          customersService.getAll().catch(e => { console.error("Error Customers:", e); return []; }) 
+          customersService.getAll().catch(e => { console.error("Error Customers:", e); return []; }),
+          // CORRECCIÓN DE LA ALERTA (ts6133):
+          getDocs(collection(db, 'system_users')).then(snap => snapshotToData(snap)).catch(() => []) 
         ]);
 
         if (propsData) setProperties(propsData);
@@ -196,6 +203,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         if (prioData) setPriorities(prioData as Priority[]);
         if (servData) setServices(servData as Service[]);
         if (custData) setCustomersList(custData);
+        if (usersData) setEmployees(usersData);
 
       } catch (error) {
         console.error("Critical error loading Firebase data:", error);
@@ -206,10 +214,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     fetchAllData();
   }, [setProperties]);
 
+  const snapshotToData = (snapshot: any) => snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+
   const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
     setIsSaving(true);
     try {
-      await propertiesService.update(propertyId, { statusId: newStatusId });
+      await propertiesService.update(propertyId, { statusId: newStatusId } as any);
       setProperties(properties.map(p => p.id === propertyId ? { ...p, statusId: newStatusId } : p));
       if (selectedHouse && selectedHouse.id === propertyId) {
         setSelectedHouse({ ...selectedHouse, statusId: newStatusId });
@@ -217,6 +227,35 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     } catch (error) {
       console.error("Error updating status:", error);
       alert("Failed to update job status.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const toggleWorkerAssignment = async (workerId: string) => {
+    if (!selectedHouse) return;
+    setIsSaving(true);
+
+    try {
+      const currentWorkers = selectedHouse.assignedWorkers || [];
+      const isAssigned = currentWorkers.includes(workerId);
+      
+      let newWorkersList;
+      if (isAssigned) {
+        newWorkersList = currentWorkers.filter(id => id !== workerId);
+      } else {
+        newWorkersList = [...currentWorkers, workerId];
+      }
+
+      await propertiesService.update(selectedHouse.id, { assignedWorkers: newWorkersList } as any);
+      
+      const updatedHouse = { ...selectedHouse, assignedWorkers: newWorkersList };
+      setSelectedHouse(updatedHouse);
+      setProperties(properties.map(p => p.id === selectedHouse.id ? updatedHouse : p));
+
+    } catch (error) {
+      console.error("Error updating workers:", error);
+      alert("Failed to update assigned workers.");
     } finally {
       setIsSaving(false);
     }
@@ -263,7 +302,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       setFormData(house);
     } else {
       const defaultStatus = statuses.length > 0 ? statuses[0].id : '';
-      setFormData({ id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '', beforePhotos: [], afterPhotos: [] });
+      setFormData({ id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '', beforePhotos: [], afterPhotos: [], assignedWorkers: [] });
     }
     setSelectedHouse(house || null);
     setIsDetailModalOpen(false);
@@ -300,10 +339,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       let workingId = formData.id;
       let isNew = false;
       
+      let finalAssignedWorkers = formData.assignedWorkers || [];
+      if (formData.teamId && finalAssignedWorkers.length === 0) {
+        finalAssignedWorkers = employees.filter(emp => emp.teamId === formData.teamId).map(emp => emp.id);
+      }
+
       if (!workingId) {
         const { id, ...restOfData } = formData;
         const dataToCreate = { 
-          ...restOfData, 
+          ...restOfData,
+          assignedWorkers: finalAssignedWorkers,
           description: `${formData.client} - ${formData.rooms} rooms`, 
           city: 'TBD', 
           size: 'TBD' 
@@ -324,11 +369,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
       const finalDataToUpdate = {
         ...formData,
+        assignedWorkers: finalAssignedWorkers,
         beforePhotos: [...(formData.beforePhotos || []), ...uploadedBeforeUrls],
         afterPhotos: [...(formData.afterPhotos || []), ...uploadedAfterUrls]
       };
 
-      await propertiesService.update(workingId, finalDataToUpdate as any);
+      if(!isNew) await propertiesService.update(workingId, finalDataToUpdate as any);
 
       if (isNew) {
         const fullNewData = { ...finalDataToUpdate, id: workingId, description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' };
@@ -366,6 +412,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   const handleOpenDetail = (house: Property) => {
     setSelectedHouse(house);
+    setIsAssigningWorker(false);
     setBeforeFiles([]);
     setAfterFiles([]);
     setBeforePhotoURLs(house.beforePhotos || []);
@@ -719,7 +766,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
-            {/* CORRECCIÓN: Botones Quality Check y Duplicate movidos al Header */}
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -799,6 +845,65 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </div>
                 </div>
 
+                {/* NUEVO: SECCIÓN DE TRABAJADORES ASIGNADOS */}
+                <div className="col-span-full" style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={s.detailLabel}><User size={14} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}}/> ASSIGNED WORKERS</span>
+                    
+                    {/* Botón para desplegar lista de trabajadores */}
+                    <div style={{ position: 'relative' }}>
+                      <button 
+                        onClick={() => setIsAssigningWorker(!isAssigningWorker)} 
+                        disabled={isSaving}
+                        style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {isAssigningWorker ? 'Close' : '+ Assign / Remove'}
+                      </button>
+
+                      {isAssigningWorker && (
+                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', width: '250px', zIndex: 10, maxHeight: '200px', overflowY: 'auto' }}>
+                          <div style={{ padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>ALL EMPLOYEES</div>
+                          {employees.map(emp => {
+                            const isAssigned = (selectedHouse.assignedWorkers || []).includes(emp.id);
+                            return (
+                              <div 
+                                key={emp.id} 
+                                onClick={() => toggleWorkerAssignment(emp.id)}
+                                style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', backgroundColor: isAssigned ? '#eff6ff' : 'transparent' }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : '#f8fafc'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : 'transparent'}
+                              >
+                                <span style={{ fontSize: '0.85rem', fontWeight: isAssigned ? 600 : 500, color: isAssigned ? '#1e40af' : '#334155' }}>
+                                  {emp.firstName} {emp.lastName}
+                                </span>
+                                {isAssigned && <CheckSquare size={14} color="#3b82f6" />}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {!(selectedHouse.assignedWorkers && selectedHouse.assignedWorkers.length > 0) ? (
+                      <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic' }}>No workers assigned specifically for this job.</span>
+                    ) : (
+                      selectedHouse.assignedWorkers.map(workerId => {
+                        const emp = employees.find(e => e.id === workerId);
+                        if (!emp) return null;
+                        return (
+                          <div key={workerId} style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', padding: '6px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <User size={12} color="#64748b" />
+                            {emp.firstName} {emp.lastName}
+                            <button onClick={() => toggleWorkerAssignment(workerId)} style={{ background: 'none', border: 'none', padding: 0, margin: 0, marginLeft: '4px', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center' }}><X size={14}/></button>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+
                 {/* PHOTO SECTIONS */}
                 <div className="col-span-full" style={{ marginTop: '10px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
@@ -850,7 +955,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
-            {/* CORRECCIÓN: Quality Check y Duplicate removidos de aquí */}
             <footer style={s.footerBetween}>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}><Trash2 size={16} style={{ marginRight: '6px' }} /> Delete</button>

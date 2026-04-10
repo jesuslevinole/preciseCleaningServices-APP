@@ -29,6 +29,7 @@ export interface SystemUser {
   altPhone: string;
   roleId: string;
   status: 'Active' | 'Pending Invite';
+  teamId?: string; // <-- AÑADIDO PARA EL TEAM CATALOG
 }
 
 // ==========================================
@@ -52,6 +53,10 @@ export interface Property {
   bathrooms: string;
   note: string;
   employeeNote: string;
+  
+  // Propiedades para la asignación de personal
+  assignedWorkers?: string[]; // <-- AÑADIDO PARA LOS TRABAJADORES DEL DÍA
+  
   // Propiedades para la subida de imágenes
   beforePhotos?: string[];
   afterPhotos?: string[];
@@ -106,3 +111,19 @@ export interface Customer {
   phone?: string;
   address?: string;
 }
+
+export interface SettingOption {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+}
+
+// Interfaces faltantes que estaban en el SettingsView pero no en tu copia
+export interface CategoryExpense { id: string; name: string; }
+export interface Responsable { id: string; name: string; color: string; }
+export interface Tax { id: string; percentage: number; }
+export interface Place { id: string; name: string; }
+export interface PaymentMethod { id: string; name: string; }
+export interface Task { id: string; placeId: string; name: string; }
+export interface Product { id: string; name: string; price: string | number; }
+export interface Business { id: string; name: string; }
