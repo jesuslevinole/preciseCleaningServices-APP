@@ -20,7 +20,7 @@ type TabOptions = 'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'q
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isBypass, setIsBypass] = useState<boolean>(false); // Detecta si entró por el botón Super Admin
+  const [isBypass, setIsBypass] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<SystemUser | null>(null);
   
   const [activeTab, setActiveTab] = useState<TabOptions>('houses');
@@ -32,7 +32,6 @@ export default function App() {
 
   const [roles, setRoles] = useState<Role[]>([]);
 
-  // 1. CARGAR ROLES
   useEffect(() => {
     const fetchRoles = async () => {
       try {
@@ -46,7 +45,6 @@ export default function App() {
     fetchRoles();
   }, []);
 
-  // 2. DETECTAR EL USUARIO ACTIVO (Sin bloquear el Bypass)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user && user.email) {
@@ -63,14 +61,12 @@ export default function App() {
           console.error("Error fetching user profile:", error);
         }
       } else {
-        // Si no hay usuario en Firebase, no forzamos logout si la persona usó el Bypass.
         setCurrentUser(null);
       }
     });
     return () => unsubscribe();
   }, []);
 
-  // Manejador del Login (Si entra sin currentUser de Firebase, es Bypass)
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
     if (!auth.currentUser) {
@@ -78,25 +74,16 @@ export default function App() {
     }
   };
 
-  // 3. CALCULAR EL ROL ACTIVO
   const activeRole = useMemo(() => {
     if (!currentUser || roles.length === 0) return null;
     return roles.find(r => r.id === currentUser.roleId) || null;
   }, [currentUser, roles]);
 
-  // LA LLAVE MAESTRA: Es super admin si usó el bypass O si su rol es explícitamente Administrator
   const isSuperAdmin = isBypass || activeRole?.name === 'Administrator';
 
-  // 4. LÓGICA DE DATOS VISIBLES
-  const visibleProperties = useMemo(() => {
-    if (isSuperAdmin) return properties;
-    if (!activeRole) return [];
-    
-    const housesPerm = activeRole.permissions.find(p => p.module === 'Houses');
-    if (!housesPerm || !housesPerm.canView) return [];
-    
-    return properties; 
-  }, [properties, activeRole, isSuperAdmin]);
+  // LOS FILTROS DE SCOPE AHORA SE APLICARÁN DIRECTAMENTE DENTRO DE HOUSESVIEW Y CALENDARVIEW
+  // Para que puedan filtrar también los equipos en la barra lateral.
+  const visibleProperties = properties; 
 
   const handleSettingsClick = () => {
     setActiveTab('settings');
@@ -114,7 +101,6 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Pasamos los permisos al menú lateral */}
       <Sidebar 
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
@@ -132,6 +118,9 @@ export default function App() {
             setProperties={setProperties as any} 
             onOpenMenu={() => setIsSidebarOpen(true)} 
             onCheckHouse={handleCheckHouse} 
+            currentUser={currentUser}
+            activeRole={activeRole}
+            isSuperAdmin={isSuperAdmin}
           />
         )}
         

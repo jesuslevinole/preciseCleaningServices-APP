@@ -5,7 +5,7 @@ import {
   Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck
 } from 'lucide-react';
 
-import type { Property, Status, Team, Priority, Service, Customer } from '../types/index';
+import type { Property, Status, Team, Priority, Service, Customer, SystemUser, Role } from '../types/index';
 
 import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
@@ -130,7 +130,6 @@ const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: {
   );
 };
 
-// Helper Functions
 const getRelationName = (list: any[], idOrName: string, fallback = '-') => {
   if (!idOrName) return fallback;
   const safeVal = String(idOrName).toLowerCase().trim();
@@ -149,16 +148,17 @@ interface HousesViewProps {
   properties: Property[];
   setProperties: React.Dispatch<React.SetStateAction<Property[]>>;
   onCheckHouse: (house: Property) => void;
+  currentUser?: SystemUser | null;
+  activeRole?: Role | null;
+  isSuperAdmin?: boolean;
 }
 
-export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse }: HousesViewProps) {
+export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
   
   const [activeFilter, setActiveFilter] = useState('All');
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
-  
-  // NUEVO ESTADO: Para el modal de resumen de un equipo
   const [selectedTeamView, setSelectedTeamView] = useState<Team | null>(null);
   
   const [statuses, setStatuses] = useState<Status[]>([]);
@@ -174,8 +174,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '',
-    beforePhotos: [], afterPhotos: [],
-    assignedWorkers: [] 
+    beforePhotos: [], afterPhotos: [], assignedWorkers: [] 
   });
 
   const [beforePhotoURLs, setBeforePhotoURLs] = useState<string[]>([]);
@@ -217,6 +216,41 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   }, [setProperties]);
 
   const snapshotToData = (snapshot: any) => snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+
+  // ========================================================
+  // LÓGICA DE FILTRADO POR SCOPE (OWN vs ALL)
+  // ========================================================
+  const housePermission = activeRole?.permissions?.find(p => p.module === 'Houses');
+  const userScope = isSuperAdmin ? 'All' : (housePermission?.scope || 'Own');
+  
+  // 1. Filtrar Propiedades visibles
+  const propertiesWithScope = properties.filter(prop => {
+    if (userScope === 'All') return true;
+    if (!currentUser) return false;
+    
+    // Es suya si él está en los assignedWorkers, O si la casa pertenece al mismo TeamId que el usuario
+    const isAssigned = prop.assignedWorkers?.includes(currentUser.id);
+    const isSameTeam = currentUser.teamId && (prop.teamId === currentUser.teamId);
+    
+    return isAssigned || isSameTeam;
+  });
+
+  // 2. Filtrar Equipos visibles (Panel de la derecha)
+  const teamsWithScope = teams.filter(team => {
+    if (userScope === 'All') return true;
+    if (!currentUser) return false;
+    
+    // Si el scope es Own, el usuario solo puede ver tarjetas de su propio equipo
+    return team.id === currentUser.teamId;
+  });
+
+  // 3. Filtrar propiedades por Status Píldoras de arriba
+  const filteredProperties = activeFilter === 'All' ? propertiesWithScope : propertiesWithScope.filter(p => {
+    const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
+    return st?.name === activeFilter;
+  });
+
+  // ========================================================
 
   const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
     setIsSaving(true);
@@ -465,11 +499,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  const filteredProperties = activeFilter === 'All' ? properties : properties.filter(p => {
-    const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
-    return st?.name === activeFilter;
-  });
-
   const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
   const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
   const kpiIcons = [Briefcase, Clock, ShieldCheck, AlertTriangle];
@@ -518,9 +547,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           <button className="bell-btn-mobile" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6b7280', flexShrink: 0 }}>
             <Bell size={18} />
           </button>
-          <button className="add-btn-mobile" onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0 }}>
-            <Plus size={16} /> New Job
-          </button>
+          
+          {/* Ocultar el botón si el usuario NO tiene permiso de Añadir (canAdd) */}
+          {(isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canAdd) && (
+            <button className="add-btn-mobile" onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0 }}>
+              <Plus size={16} /> New Job
+            </button>
+          )}
         </div>
       </header>
 
@@ -531,7 +564,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         ) : (
           statuses.slice(0, 4).map((status, index) => {
             const Icon = kpiIcons[index % kpiIcons.length];
-            const count = properties.filter(p => p.statusId === status.id || p.statusId === status.name).length;
+            const count = propertiesWithScope.filter(p => p.statusId === status.id || p.statusId === status.name).length;
             return (
               <div style={s.kpiCard} key={status.id}>
                 <div style={s.kpiIconBox(status.color)}><Icon size={22} /></div>
@@ -582,17 +615,20 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   {isLoading ? (
                     <tr><td colSpan={6} style={{textAlign: 'center', padding: '40px', color: '#6b7280'}}>Loading database...</td></tr>
                   ) : filteredProperties.length === 0 ? (
-                    <tr><td colSpan={6} style={{textAlign: 'center', padding: '40px', color: '#6b7280', fontStyle: 'italic'}}>No jobs to display.</td></tr>
+                    <tr><td colSpan={6} style={{textAlign: 'center', padding: '40px', color: '#6b7280', fontStyle: 'italic'}}>No jobs to display for your team.</td></tr>
                   ) : filteredProperties.map((prop) => {
                     const teamName = getRelationName(teams, prop.teamId, 'Unassigned');
                     const serviceName = getRelationName(services, prop.serviceId, 'Regular');
+
+                    const canEdit = isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canEdit;
+                    const canDelete = isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canDelete;
 
                     return (
                       <tr key={prop.id} onClick={() => handleOpenDetail(prop)} style={{ cursor: 'pointer', transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                         <td data-label="Actions" style={s.td}>
                           <div style={{ display: 'flex', gap: '4px' }}>
-                            <button onClick={(e) => { e.stopPropagation(); handleOpenForm(prop); }} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px', display: 'flex' }}><Edit2 size={16} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); setSelectedHouse(prop); handleDelete(); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px', display: 'flex' }}><Trash2 size={16} /></button>
+                            {canEdit && <button onClick={(e) => { e.stopPropagation(); handleOpenForm(prop); }} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px', display: 'flex' }}><Edit2 size={16} /></button>}
+                            {canDelete && <button onClick={(e) => { e.stopPropagation(); setSelectedHouse(prop); handleDelete(); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px', display: 'flex' }}><Trash2 size={16} /></button>}
                           </div>
                         </td>
                         <td data-label="Client" style={s.td}>
@@ -605,7 +641,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                         <td data-label="Type" style={{ ...s.td, fontWeight: 500 }}>{serviceName}</td>
                         <td data-label="Team" style={{ ...s.td, color: '#6b7280' }}>{teamName}</td>
                         <td data-label="Status" style={{ ...s.td, textAlign: 'right' }}>
-                          <StatusPillSelector currentStatusId={prop.statusId} statuses={statuses} onChange={(newId) => handleQuickStatusChange(prop.id, newId)} disabled={isSaving} />
+                          <StatusPillSelector currentStatusId={prop.statusId} statuses={statuses} onChange={(newId) => handleQuickStatusChange(prop.id, newId)} disabled={isSaving || !canEdit} />
                         </td>
                       </tr>
                     );
@@ -623,11 +659,11 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {isLoading ? (
                 <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Loading teams...</div>
-              ) : teams.length === 0 ? (
+              ) : teamsWithScope.length === 0 ? (
                 <div style={{ color: '#6b7280', fontSize: '0.9rem', fontStyle: 'italic' }}>No configured teams.</div>
               ) : (
-                teams.map(team => {
-                  const assignedProps = properties.filter(p => p.teamId === team.id || p.teamId === team.name);
+                teamsWithScope.map(team => {
+                  const assignedProps = propertiesWithScope.filter(p => p.teamId === team.id || p.teamId === team.name);
                   return (
                     <div 
                       key={team.id} 
@@ -1025,12 +1061,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   <Briefcase size={16} color="#f59e0b" /> Assigned Jobs Today
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {properties.filter(p => p.teamId === selectedTeamView.id).length === 0 ? (
+                  {propertiesWithScope.filter(p => p.teamId === selectedTeamView.id).length === 0 ? (
                     <div style={{ padding: '12px', backgroundColor: '#fffbeb', borderRadius: '8px', color: '#b45309', fontSize: '0.9rem', fontStyle: 'italic' }}>
                       No jobs assigned for today.
                     </div>
                   ) : (
-                    properties.filter(p => p.teamId === selectedTeamView.id).map(prop => (
+                    propertiesWithScope.filter(p => p.teamId === selectedTeamView.id).map(prop => (
                       <div key={prop.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
                         <div>
                           <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.95rem', marginBottom: '2px' }}>{prop.client}</div>
