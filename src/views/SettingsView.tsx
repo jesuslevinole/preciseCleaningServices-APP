@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { 
   Tags, Users, UserCheck, Flag, Activity, Percent, 
   MapPin, Wrench, CreditCard, ClipboardList, Package, Building, Plus,
-  Edit2, Trash2, X, ChevronDown 
+  Edit2, Trash2, X, ChevronDown, Contact
 } from 'lucide-react';
 import type { SettingOption, CategoryExpense, Team, Responsable, Priority, Status, Tax, Place, Service, PaymentMethod, Task, Product, Business } from '../types';
 
@@ -12,10 +12,11 @@ import { settingsService } from '../services/settingsService';
 import { db } from '../config/firebase';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 
+// AQUÍ ESTÁ EL NUEVO MENÚ CON "TEAM CATALOG"
 const settingsOptions: SettingOption[] = [
   { id: 'category', label: 'Category Expenses', icon: Tags },
   { id: 'team', label: 'Teams', icon: Users },
-  { id: 'team_catalog', label: 'Team Roster', icon: UserCheck }, // NUEVO CATÁLOGO DE EQUIPOS
+  { id: 'team_catalog', label: 'Team Catalog', icon: Contact }, // <-- EL NUEVO CATÁLOGO
   { id: 'responsable', label: 'Responsable', icon: UserCheck },
   { id: 'priority', label: 'Priority', icon: Flag },
   { id: 'status', label: 'Status', icon: Activity },
@@ -43,7 +44,6 @@ const collectionMap: Record<string, string> = {
   business: 'settings_businesses'
 };
 
-// Componente CustomSelect para mantener la UI Premium
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const selected = options.find((o: any) => o.id === value);
@@ -166,7 +166,7 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
         if (taskData.length) setTasks(taskData as Task[]);
         if (taxData.length) setTaxValue(taxData[0] as Tax);
 
-        // EXTRA: Cargar System Users para el catálogo de equipos
+        // Cargar System Users para el catálogo de equipos
         const usersReq = await getDocs(collection(db, 'system_users')).catch(() => null);
         if (usersReq) {
           setSystemUsers(usersReq.docs.map(d => ({ id: d.id, ...d.data() })));
