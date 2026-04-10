@@ -49,7 +49,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
             <LogIn size={28} color="#ffffff" />
           </div>
           <h1 style={{ margin: 0, fontSize: '1.6rem', color: '#0f172a', fontWeight: 800 }}>
-            {view === 'login' ? 'Welcome Back' : 'Recover Access'}
+            {view === 'login' ? 'Precise Cleaning Services' : 'Recover Access'}
           </h1>
           <p style={{ margin: '8px 0 0 0', color: '#64748b', fontSize: '0.95rem' }}>
             {view === 'login' ? 'Authorize your session to continue' : 'Contact admin if you lost your password'}

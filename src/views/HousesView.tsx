@@ -177,7 +177,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const beforeInputRef = useRef<HTMLInputElement>(null);
   const afterInputRef = useRef<HTMLInputElement>(null);
 
-  // --- FETCH DATA ROBUSTO A PRUEBA DE FALLOS ---
   useEffect(() => {
     const fetchAllData = async () => {
       setIsLoading(true);
@@ -191,8 +190,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           customersService.getAll().catch(e => { console.error("Error Customers:", e); return []; }) 
         ]);
 
-        // CORRECCIÓN CLAVE: Quitamos el chequeo de '.length > 0' para que, 
-        // si Firebase devuelve vacío (porque no hay datos), se borre la data de prueba.
         if (propsData) setProperties(propsData);
         if (statusData) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
         if (teamData) setTeams(teamData as Team[]);
@@ -203,7 +200,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       } catch (error) {
         console.error("Critical error loading Firebase data:", error);
       } finally {
-        setIsLoading(false); // Apaga la carga obligatoriamente
+        setIsLoading(false); 
       }
     };
     fetchAllData();
@@ -722,9 +719,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-70" onClick={e => e.stopPropagation()}>
+            {/* CORRECCIÓN: Botones Quality Check y Duplicate movidos al Header */}
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
-              <button style={s.closeBtn} onClick={() => setIsDetailModalOpen(false)}><X size={24} /></button>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <button onClick={handleDuplicate} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><Copy size={14} /> Duplicate</button>
+                <button onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><ClipboardCheck size={14} /> Quality Check</button>
+                <button style={{ ...s.closeBtn, marginLeft: '8px' }} onClick={() => setIsDetailModalOpen(false)}><X size={24} /></button>
+              </div>
             </header>
 
             <div style={s.body}>
@@ -848,14 +850,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
+            {/* CORRECCIÓN: Quality Check y Duplicate removidos de aquí */}
             <footer style={s.footerBetween}>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}><Trash2 size={16} style={{ marginRight: '6px' }} /> Delete</button>
-                <button onClick={handleDuplicate} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}><Copy size={16} /> Duplicate</button>
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
-                <button onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}><ClipboardCheck size={16} /> Quality Check</button>
                 <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>
               </div>
             </footer>
