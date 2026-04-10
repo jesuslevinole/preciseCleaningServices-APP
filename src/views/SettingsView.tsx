@@ -7,12 +7,15 @@ import {
 } from 'lucide-react';
 import type { SettingOption, CategoryExpense, Team, Responsable, Priority, Status, Tax, Place, Service, PaymentMethod, Task, Product, Business } from '../types';
 
-// IMPORTACIÓN DEL SERVICIO DE FIREBASE
+// IMPORTACIÓN DEL SERVICIO Y FIREBASE
 import { settingsService } from '../services/settingsService';
+import { db } from '../config/firebase';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 
 const settingsOptions: SettingOption[] = [
   { id: 'category', label: 'Category Expenses', icon: Tags },
-  { id: 'team', label: 'Team', icon: Users },
+  { id: 'team', label: 'Teams', icon: Users },
+  { id: 'team_catalog', label: 'Team Roster', icon: UserCheck }, // NUEVO CATÁLOGO DE EQUIPOS
   { id: 'responsable', label: 'Responsable', icon: UserCheck },
   { id: 'priority', label: 'Priority', icon: Flag },
   { id: 'status', label: 'Status', icon: Activity },
@@ -46,7 +49,7 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon }: any
   const selected = options.find((o: any) => o.id === value);
 
   return (
-    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
+    <div tabIndex={0} onBlur={() => setTimeout(() => setIsOpen(false), 200)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', position: 'relative' }}
@@ -103,6 +106,10 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
   const [places, setPlaces] = useState<Place[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   
+  // NUEVO ESTADO PARA EL CATÁLOGO DE EMPLEADOS
+  const [systemUsers, setSystemUsers] = useState<any[]>([]);
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState('All');
+  
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -115,7 +122,8 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
   
   const [formData, setFormData] = useState({ 
     order: '', name: '', business: '', color: '#3b82f6', percentage: 0, estimatedTime: '', placeId: '', price: '',
-    placeTasks: [] as {id: string, name: string}[] 
+    placeTasks: [] as {id: string, name: string}[],
+    teamId: '' // Añadido para el Team Catalog
   });
   
   const [newTaskInput, setNewTaskInput] = useState(''); 
@@ -158,6 +166,12 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
         if (taskData.length) setTasks(taskData as Task[]);
         if (taxData.length) setTaxValue(taxData[0] as Tax);
 
+        // EXTRA: Cargar System Users para el catálogo de equipos
+        const usersReq = await getDocs(collection(db, 'system_users')).catch(() => null);
+        if (usersReq) {
+          setSystemUsers(usersReq.docs.map(d => ({ id: d.id, ...d.data() })));
+        }
+
       } catch (error) {
         console.error("Error fetching settings:", error);
       } finally {
@@ -198,11 +212,12 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
         order: item.order || '', name: item.name || '', business: item.business || '', 
         color: item.color || '#3b82f6', percentage: item.percentage || 0, estimatedTime: item.estimatedTime || '',
         placeId: item.placeId || '', price: item.price || '',
-        placeTasks: currentSettingView === 'place' ? tasks.filter(t => t.placeId === item.id).map(t => ({id: t.id, name: t.name})) : []
+        placeTasks: currentSettingView === 'place' ? tasks.filter(t => t.placeId === item.id).map(t => ({id: t.id, name: t.name})) : [],
+        teamId: item.teamId || ''
       });
     } else {
       setSelectedItem(null);
-      setFormData({ order: '', name: '', business: '', color: '#3b82f6', percentage: 0, estimatedTime: '', placeId: '', price: '', placeTasks: [] });
+      setFormData({ order: '', name: '', business: '', color: '#3b82f6', percentage: 0, estimatedTime: '', placeId: '', price: '', placeTasks: [], teamId: '' });
     }
     setNewTaskInput('');
     setIsDetailModalOpen(false); 
@@ -245,6 +260,22 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
   };
 
   const handleSave = async () => {
+    // LÓGICA ESPECIAL PARA GUARDAR TEAM ROSTER
+    if (currentSettingView === 'team_catalog') {
+      setIsSaving(true);
+      try {
+        await updateDoc(doc(db, 'system_users', selectedItem.id), { teamId: formData.teamId });
+        setSystemUsers(systemUsers.map(u => u.id === selectedItem.id ? { ...u, teamId: formData.teamId } : u));
+        handleCloseForm();
+      } catch(err) {
+        console.error(err);
+        alert("Failed to assign team to employee.");
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
     if (currentSettingView === 'tax') {
       setIsSaving(true);
       try {
@@ -482,9 +513,28 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                 <h2 style={{ fontSize: '1.8rem', margin: 0, color: '#111827', fontWeight: 700 }}>{activeSettingOption.label}</h2>
               </div>
             </div>
-            {currentSettingView !== 'tax' && (
-              <button onClick={() => handleOpenForm()} style={s.btnPrimary}><Plus size={18} /> Add New</button>
-            )}
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              {/* FILTRO PARA EL TEAM CATALOG */}
+              {currentSettingView === 'team_catalog' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>Filter:</span>
+                  <select 
+                    style={{ ...s.input, width: 'auto', padding: '8px 12px', minWidth: '160px', cursor: 'pointer' }} 
+                    value={selectedTeamFilter} 
+                    onChange={e => setSelectedTeamFilter(e.target.value)}
+                  >
+                    <option value="All">All Employees</option>
+                    <option value="Unassigned">Unassigned</option>
+                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
+              
+              {currentSettingView !== 'tax' && currentSettingView !== 'team_catalog' && (
+                <button onClick={() => handleOpenForm()} style={s.btnPrimary}><Plus size={18} /> Add New</button>
+              )}
+            </div>
           </header>
 
           <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', width: '100%', overflow: 'hidden', padding: '10px' }}>
@@ -495,25 +545,69 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                 <table className="responsive-settings-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
                   <thead>
                     <tr>
-                      {currentSettingView === 'status' && <th style={thStyle}>Order</th>}
-                      {currentSettingView === 'task' && <th style={thStyle}>Place</th>}
-                      
-                      {currentSettingView === 'task' ? <th style={thStyle}>Task</th> : 
-                       currentSettingView === 'tax' ? <th style={thStyle}>Tax %</th> : 
-                       currentSettingView === 'business' ? <th style={thStyle}>Business</th> : 
-                       currentSettingView === 'payment' ? <th style={thStyle}>Payment Method</th> :
-                       <th style={thStyle}>Name</th>}
-                      
-                      {currentSettingView === 'product' && <th style={thStyle}>Price</th>}
-                      {currentSettingView === 'service' && <th style={thStyle}>Estimated time</th>}
-                      
-                      {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && <th style={thStyle}>Business</th>}
-                      {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && <th style={thStyle}>Color</th>}
+                      {currentSettingView === 'team_catalog' ? (
+                        <>
+                          <th style={thStyle}>Employee</th>
+                          <th style={thStyle}>Email</th>
+                          <th style={thStyle}>Assigned Team</th>
+                        </>
+                      ) : (
+                        <>
+                          {currentSettingView === 'status' && <th style={thStyle}>Order</th>}
+                          {currentSettingView === 'task' && <th style={thStyle}>Place</th>}
+                          
+                          {currentSettingView === 'task' ? <th style={thStyle}>Task</th> : 
+                           currentSettingView === 'tax' ? <th style={thStyle}>Tax %</th> : 
+                           currentSettingView === 'business' ? <th style={thStyle}>Business</th> : 
+                           currentSettingView === 'payment' ? <th style={thStyle}>Payment Method</th> :
+                           <th style={thStyle}>Name</th>}
+                          
+                          {currentSettingView === 'product' && <th style={thStyle}>Price</th>}
+                          {currentSettingView === 'service' && <th style={thStyle}>Estimated time</th>}
+                          
+                          {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && <th style={thStyle}>Business</th>}
+                          {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && <th style={thStyle}>Color</th>}
+                        </>
+                      )}
                       
                       <th style={{...thStyle, textAlign: 'right', width: '100px'}}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
+                    {/* TEAM CATALOG ROWS */}
+                    {currentSettingView === 'team_catalog' && systemUsers
+                      .filter(u => {
+                        if (selectedTeamFilter === 'All') return true;
+                        if (selectedTeamFilter === 'Unassigned') return !u.teamId;
+                        return u.teamId === selectedTeamFilter;
+                      })
+                      .map((u) => {
+                        const t = teams.find(team => team.id === u.teamId);
+                        return (
+                          <tr key={u.id} onClick={() => handleOpenDetail(u)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                            <td data-label="Employee" style={{...tdStyle, fontWeight: 600}}>{u.firstName} {u.lastName}</td>
+                            <td data-label="Email" style={{...tdStyle, color: '#6b7280'}}>{u.email}</td>
+                            <td data-label="Assigned Team" style={tdStyle}>
+                              {t ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ backgroundColor: t.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>
+                                  <span style={{ fontWeight: 500 }}>{t.name}</span>
+                                </div>
+                              ) : (
+                                <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Unassigned</span>
+                              )}
+                            </td>
+                            <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                                <button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(u); }}>
+                                  <Edit2 size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                    })}
+
                     {currentSettingView === 'category' && categories.map((cat) => (
                       <tr key={cat.id} onClick={() => handleOpenDetail(cat)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                         <td data-label="Name" style={tdStyle}>{cat.name}</td>
@@ -618,7 +712,23 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
             </header>
             <div style={s.body}>
 
-              {/* 2. REEMPLAZO DEL SELECT NATIVO POR EL COMPONENTE PREMIUM (CustomSelect) */}
+              {currentSettingView === 'team_catalog' && (
+                <div style={s.formGroup}>
+                  <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <strong style={{ display: 'block', fontSize: '1.1rem', color: '#111827', marginBottom: '4px' }}>{selectedItem?.firstName} {selectedItem?.lastName}</strong>
+                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>{selectedItem?.email}</span>
+                  </div>
+                  <label style={s.label}>Assign to Team</label>
+                  <CustomSelect 
+                    options={teams}
+                    value={formData.teamId}
+                    onChange={(val: string) => setFormData({ ...formData, teamId: val })}
+                    placeholder="Select Team..."
+                    icon={Users}
+                  />
+                </div>
+              )}
+
               {currentSettingView === 'task' && (
                  <div style={s.formGroup}>
                   <label style={s.label}>Place <span style={{color: '#3b82f6'}}>*</span></label>
@@ -637,7 +747,7 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                   <label style={s.label}>Tax Percentage (%) <span style={{color: '#3b82f6'}}>*</span></label>
                   <input type="number" step="0.01" autoFocus style={s.input} value={formData.percentage} onChange={(e) => setFormData({ ...formData, percentage: Number(e.target.value) })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
                 </div>
-              ) : (
+              ) : currentSettingView !== 'team_catalog' && (
                 <>
                   {currentSettingView === 'status' && (
                     <div style={s.formGroup}>
@@ -726,7 +836,23 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
             </header>
             <div style={s.body}>
               
-              {currentSettingView === 'place' ? (
+              {currentSettingView === 'team_catalog' ? (
+                <>
+                  <div style={s.detailItem}><span style={s.detailLabel}>Employee Name</span><span style={s.detailValue}>{selectedItem.firstName} {selectedItem.lastName}</span></div>
+                  <div style={s.detailItem}><span style={s.detailLabel}>Email Address</span><span style={s.detailValue}>{selectedItem.email}</span></div>
+                  <div style={s.detailItem}>
+                    <span style={s.detailLabel}>Assigned Team</span>
+                    {teams.find(t => t.id === selectedItem.teamId) ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                        <span style={{ backgroundColor: teams.find(t => t.id === selectedItem.teamId)?.color, width: '16px', height: '16px', borderRadius: '50%', display: 'inline-block' }}></span>
+                        <span style={s.detailValue}>{teams.find(t => t.id === selectedItem.teamId)?.name}</span>
+                      </div>
+                    ) : (
+                      <span style={{ ...s.detailValue, color: '#6b7280', fontStyle: 'italic', marginTop: '6px' }}>Unassigned</span>
+                    )}
+                  </div>
+                </>
+              ) : currentSettingView === 'place' ? (
                 <>
                   <div style={s.detailItem}>
                     <span style={s.detailLabel}>PLACE NAME:</span>
@@ -809,8 +935,8 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
 
             </div>
             
-            <footer style={{...s.footer, justifyContent: currentSettingView === 'tax' ? 'flex-end' : 'space-between'}}>
-              {currentSettingView !== 'tax' && (
+            <footer style={{...s.footer, justifyContent: (currentSettingView === 'tax' || currentSettingView === 'team_catalog') ? 'flex-end' : 'space-between'}}>
+              {currentSettingView !== 'tax' && currentSettingView !== 'team_catalog' && (
                 <button style={s.btnDangerLight} onClick={() => handleDeleteClick(selectedItem.id)}>
                   <Trash2 size={16}/> Delete {activeSettingOption?.label}
                 </button>
