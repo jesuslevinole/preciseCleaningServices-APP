@@ -14,27 +14,30 @@ interface SidebarProps {
   activeTab: TabOptions;
   setActiveTab: (tab: TabOptions) => void;
   onSettingsClick: () => void;
-  activeRole: Role | null; // Recibimos el rol del usuario
+  activeRole: Role | null;
+  isSuperAdmin: boolean; // Recibimos la llave maestra
 }
 
 export default function Sidebar({ 
-  isSidebarOpen, setIsSidebarOpen, activeTab, setActiveTab, onSettingsClick, activeRole 
+  isSidebarOpen, setIsSidebarOpen, activeTab, setActiveTab, onSettingsClick, activeRole, isSuperAdmin 
 }: SidebarProps) {
   
-  // Función para verificar si tiene acceso a un módulo específico
+  // Función universal para chequear permisos
   const canView = (moduleName: string) => {
+    if (isSuperAdmin) return true; // Llave maestra ve todo
     if (!activeRole) return false;
-    if (activeRole.name === 'Administrator') return true; // Admin ve todo
     
     const permission = activeRole.permissions?.find(p => p.module === moduleName);
     return permission ? permission.canView : false;
   };
 
-  const isAdmin = activeRole?.name === 'Administrator';
+  // El acceso a Admin (Roles, Users, Settings) está dictado por el permiso "Settings" de la matriz
+  const canViewAdmin = isSuperAdmin || canView('Settings');
 
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to log out?')) {
       await signOut(auth);
+      window.location.reload(); // Forzamos limpieza si era bypass
     }
   };
 
@@ -54,7 +57,7 @@ export default function Sidebar({
       </div>
 
       <nav className="sidebar-nav" style={{ flex: 1 }}>
-        {/* MÓDULOS OPERATIVOS (Protegidos por Rol) */}
+        {/* MÓDULOS OPERATIVOS */}
         
         {canView('Houses') && (
           <button className={`nav-item ${activeTab === 'houses' ? 'active' : ''}`} onClick={() => setActiveTab('houses')}>
@@ -77,8 +80,8 @@ export default function Sidebar({
           </button>
         )}
 
-        {/* SECCIÓN ADMIN (Solo para Administradores) */}
-        {isAdmin && (
+        {/* SECCIÓN ADMIN */}
+        {canViewAdmin && (
           <>
             {isSidebarOpen && <div className="menu-label" style={{ marginTop: '20px' }}>ADMIN</div>}
 

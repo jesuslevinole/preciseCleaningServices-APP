@@ -12,7 +12,6 @@ import UsersView from './views/admin/UsersView';
 import type { Property, Role, SystemUser } from './types/index';
 import './App.css';
 
-// Importaciones para detectar la sesión y leer de Firebase
 import { auth, db } from './config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, where } from 'firebase/firestore';
@@ -21,6 +20,7 @@ type TabOptions = 'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'q
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isBypass, setIsBypass] = useState<boolean>(false); // Detecta si entró por el botón Super Admin
   const [currentUser, setCurrentUser] = useState<SystemUser | null>(null);
   
   const [activeTab, setActiveTab] = useState<TabOptions>('houses');
@@ -32,7 +32,7 @@ export default function App() {
 
   const [roles, setRoles] = useState<Role[]>([]);
 
-  // 1. CARGAR TODOS LOS ROLES GLOBALES
+  // 1. CARGAR ROLES
   useEffect(() => {
     const fetchRoles = async () => {
       try {
@@ -46,13 +46,13 @@ export default function App() {
     fetchRoles();
   }, []);
 
-  // 2. DETECTAR EL USUARIO ACTIVO Y BUSCAR SU PERFIL
+  // 2. DETECTAR EL USUARIO ACTIVO (Sin bloquear el Bypass)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user && user.email) {
         setIsAuthenticated(true);
+        setIsBypass(false);
         try {
-          // Buscamos el perfil del usuario en Firestore por su email
           const q = query(collection(db, 'system_users'), where('email', '==', user.email.toLowerCase().trim()));
           const snapshot = await getDocs(q);
           if (!snapshot.empty) {
@@ -63,36 +63,40 @@ export default function App() {
           console.error("Error fetching user profile:", error);
         }
       } else {
-        setIsAuthenticated(false);
+        // Si no hay usuario en Firebase, no forzamos logout si la persona usó el Bypass.
         setCurrentUser(null);
       }
     });
     return () => unsubscribe();
   }, []);
 
-  // 3. CALCULAR EL ROL ACTIVO EN BASE AL USUARIO
+  // Manejador del Login (Si entra sin currentUser de Firebase, es Bypass)
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true);
+    if (!auth.currentUser) {
+      setIsBypass(true);
+    }
+  };
+
+  // 3. CALCULAR EL ROL ACTIVO
   const activeRole = useMemo(() => {
     if (!currentUser || roles.length === 0) return null;
     return roles.find(r => r.id === currentUser.roleId) || null;
   }, [currentUser, roles]);
 
-  // 4. LÓGICA PARA OCULTAR REGISTROS (SCOPE: OWN vs ALL)
+  // LA LLAVE MAESTRA: Es super admin si usó el bypass O si su rol es explícitamente Administrator
+  const isSuperAdmin = isBypass || activeRole?.name === 'Administrator';
+
+  // 4. LÓGICA DE DATOS VISIBLES
   const visibleProperties = useMemo(() => {
+    if (isSuperAdmin) return properties;
     if (!activeRole) return [];
-    if (activeRole.name === 'Administrator') return properties;
     
-    // Verificamos si tiene permiso de ver Houses
     const housesPerm = activeRole.permissions.find(p => p.module === 'Houses');
     if (!housesPerm || !housesPerm.canView) return [];
     
-    // Si el scope es "Own", aquí filtraremos por su equipo cuando lo implementemos
-    if (housesPerm.scope === 'Own') {
-      // TODO: Filtrar properties.filter(p => p.teamId === currentUser.teamId)
-      return properties; // Por ahora mostramos todas las que el sistema traiga
-    }
-    
     return properties; 
-  }, [properties, activeRole]);
+  }, [properties, activeRole, isSuperAdmin]);
 
   const handleSettingsClick = () => {
     setActiveTab('settings');
@@ -105,12 +109,12 @@ export default function App() {
   };
 
   if (!isAuthenticated) {
-    return <LoginView onLoginSuccess={() => setIsAuthenticated(true)} />;
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
     <div className="app-container">
-      {/* Pasamos el activeRole al Sidebar para que sepa qué ocultar */}
+      {/* Pasamos los permisos al menú lateral */}
       <Sidebar 
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
@@ -118,6 +122,7 @@ export default function App() {
         setActiveTab={setActiveTab} 
         onSettingsClick={handleSettingsClick}
         activeRole={activeRole} 
+        isSuperAdmin={isSuperAdmin}
       />
 
       <main className="main-content">
