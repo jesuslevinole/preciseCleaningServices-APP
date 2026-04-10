@@ -130,6 +130,7 @@ const StatusPillSelector = ({ currentStatusId, statuses, onChange, disabled }: {
   );
 };
 
+// Helper Functions
 const getRelationName = (list: any[], idOrName: string, fallback = '-') => {
   if (!idOrName) return fallback;
   const safeVal = String(idOrName).toLowerCase().trim();
@@ -183,6 +184,10 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [afterFiles, setAfterFiles] = useState<File[]>([]);
   const beforeInputRef = useRef<HTMLInputElement>(null);
   const afterInputRef = useRef<HTMLInputElement>(null);
+
+  // --- PERMISOS ---
+  const canEdit = isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canEdit;
+  const canDelete = isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canDelete;
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -269,7 +274,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   };
 
   const toggleWorkerAssignment = async (workerId: string) => {
-    if (!selectedHouse) return;
+    if (!selectedHouse || !canEdit) return; // Validación de permisos
     setIsSaving(true);
 
     try {
@@ -620,9 +625,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     const teamName = getRelationName(teams, prop.teamId, 'Unassigned');
                     const serviceName = getRelationName(services, prop.serviceId, 'Regular');
 
-                    const canEdit = isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canEdit;
-                    const canDelete = isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canDelete;
-
                     return (
                       <tr key={prop.id} onClick={() => handleOpenDetail(prop)} style={{ cursor: 'pointer', transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                         <td data-label="Actions" style={s.td}>
@@ -814,7 +816,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <button onClick={handleDuplicate} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><Copy size={14} /> Duplicate</button>
+                {canEdit && <button onClick={handleDuplicate} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><Copy size={14} /> Duplicate</button>}
                 <button onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><ClipboardCheck size={14} /> Quality Check</button>
                 <button style={{ ...s.closeBtn, marginLeft: '8px' }} onClick={() => setIsDetailModalOpen(false)}><X size={24} /></button>
               </div>
@@ -833,7 +835,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <div style={s.detailItem}>
                   <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
                   <div style={{ marginTop: '4px' }}>
-                    <StatusPillSelector currentStatusId={selectedHouse.statusId} statuses={statuses} onChange={(newId: string) => handleQuickStatusChange(selectedHouse.id, newId)} disabled={isSaving} />
+                    <StatusPillSelector currentStatusId={selectedHouse.statusId} statuses={statuses} onChange={(newId: string) => handleQuickStatusChange(selectedHouse.id, newId)} disabled={isSaving || !canEdit} />
                   </div>
                 </div>
                 <div style={s.detailItem}>
@@ -895,39 +897,41 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <span style={s.detailLabel}><User size={14} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}}/> ASSIGNED WORKERS</span>
                     
-                    {/* Botón para desplegar lista de trabajadores */}
-                    <div style={{ position: 'relative' }}>
-                      <button 
-                        onClick={() => setIsAssigningWorker(!isAssigningWorker)} 
-                        disabled={isSaving}
-                        style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        {isAssigningWorker ? 'Close' : '+ Assign / Remove'}
-                      </button>
+                    {/* Botón para desplegar lista de trabajadores (solo si tiene permisos) */}
+                    {canEdit && (
+                      <div style={{ position: 'relative' }}>
+                        <button 
+                          onClick={() => setIsAssigningWorker(!isAssigningWorker)} 
+                          disabled={isSaving}
+                          style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          {isAssigningWorker ? 'Close' : '+ Assign / Remove'}
+                        </button>
 
-                      {isAssigningWorker && (
-                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', width: '250px', zIndex: 10, maxHeight: '200px', overflowY: 'auto' }}>
-                          <div style={{ padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>ALL EMPLOYEES</div>
-                          {employees.map(emp => {
-                            const isAssigned = (selectedHouse.assignedWorkers || []).includes(emp.id);
-                            return (
-                              <div 
-                                key={emp.id} 
-                                onClick={() => toggleWorkerAssignment(emp.id)}
-                                style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', backgroundColor: isAssigned ? '#eff6ff' : 'transparent' }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : '#f8fafc'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : 'transparent'}
-                              >
-                                <span style={{ fontSize: '0.85rem', fontWeight: isAssigned ? 600 : 500, color: isAssigned ? '#1e40af' : '#334155' }}>
-                                  {emp.firstName} {emp.lastName}
-                                </span>
-                                {isAssigned && <CheckSquare size={14} color="#3b82f6" />}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
+                        {isAssigningWorker && (
+                          <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', width: '250px', zIndex: 10, maxHeight: '200px', overflowY: 'auto' }}>
+                            <div style={{ padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>ALL EMPLOYEES</div>
+                            {employees.map(emp => {
+                              const isAssigned = (selectedHouse.assignedWorkers || []).includes(emp.id);
+                              return (
+                                <div 
+                                  key={emp.id} 
+                                  onClick={() => toggleWorkerAssignment(emp.id)}
+                                  style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', backgroundColor: isAssigned ? '#eff6ff' : 'transparent' }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : '#f8fafc'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : 'transparent'}
+                                >
+                                  <span style={{ fontSize: '0.85rem', fontWeight: isAssigned ? 600 : 500, color: isAssigned ? '#1e40af' : '#334155' }}>
+                                    {emp.firstName} {emp.lastName}
+                                  </span>
+                                  {isAssigned && <CheckSquare size={14} color="#3b82f6" />}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -941,7 +945,10 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                           <div key={workerId} style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', padding: '6px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <User size={12} color="#64748b" />
                             {emp.firstName} {emp.lastName}
-                            <button onClick={() => toggleWorkerAssignment(workerId)} style={{ background: 'none', border: 'none', padding: 0, margin: 0, marginLeft: '4px', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center' }}><X size={14}/></button>
+                            {/* Ocultar la X roja si no tiene permisos */}
+                            {canEdit && (
+                              <button onClick={() => toggleWorkerAssignment(workerId)} style={{ background: 'none', border: 'none', padding: 0, margin: 0, marginLeft: '4px', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center' }}><X size={14}/></button>
+                            )}
                           </div>
                         )
                       })
@@ -955,15 +962,19 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <span style={s.detailLabel}><ImageIcon size={14} /> BEFORE PHOTOS</span>
-                        <button onClick={() => beforeInputRef.current?.click()} disabled={isSaving} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
-                        <input type="file" multiple accept="image/*" ref={beforeInputRef} style={{ display: 'none' }} onChange={(e) => handlePhotoUpload(e, 'before')} />
+                        {canEdit && (
+                          <>
+                            <button onClick={() => beforeInputRef.current?.click()} disabled={isSaving} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
+                            <input type="file" multiple accept="image/*" ref={beforeInputRef} style={{ display: 'none' }} onChange={(e) => handlePhotoUpload(e, 'before')} />
+                          </>
+                        )}
                       </div>
                       {beforePhotoURLs.length === 0 ? <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos</div> : 
                         <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
                           {beforePhotoURLs.map((url, i) => (
                             <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
                               <img src={url} alt="Before" style={{ height: '80px', width: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
-                              <button onClick={() => handleRemovePhoto(i, 'before')} style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                              {canEdit && <button onClick={() => handleRemovePhoto(i, 'before')} style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
                             </div>
                           ))}
                         </div>
@@ -972,22 +983,26 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <span style={s.detailLabel}><ImageIcon size={14} /> AFTER PHOTOS</span>
-                        <button onClick={() => afterInputRef.current?.click()} disabled={isSaving} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
-                        <input type="file" multiple accept="image/*" ref={afterInputRef} style={{ display: 'none' }} onChange={(e) => handlePhotoUpload(e, 'after')} />
+                        {canEdit && (
+                          <>
+                            <button onClick={() => afterInputRef.current?.click()} disabled={isSaving} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>+ Add Photo</button>
+                            <input type="file" multiple accept="image/*" ref={afterInputRef} style={{ display: 'none' }} onChange={(e) => handlePhotoUpload(e, 'after')} />
+                          </>
+                        )}
                       </div>
                       {afterPhotoURLs.length === 0 ? <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos</div> : 
                         <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
                           {afterPhotoURLs.map((url, i) => (
                             <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
                               <img src={url} alt="After" style={{ height: '80px', width: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
-                              <button onClick={() => handleRemovePhoto(i, 'after')} style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                              {canEdit && <button onClick={() => handleRemovePhoto(i, 'after')} style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
                             </div>
                           ))}
                         </div>
                       }
                     </div>
                   </div>
-                  {(beforeFiles.length > 0 || afterFiles.length > 0) && (
+                  {canEdit && (beforeFiles.length > 0 || afterFiles.length > 0) && (
                     <div style={{ marginTop: '12px', textAlign: 'right' }}>
                        <button onClick={handleSave} disabled={isSaving} style={{...s.btnPrimary, display: 'inline-flex'}}>{isSaving ? 'Uploading...' : 'Save Photos'}</button>
                     </div>
@@ -1002,11 +1017,11 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
             <footer style={s.footerBetween}>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}><Trash2 size={16} style={{ marginRight: '6px' }} /> Delete</button>
+                {canDelete && <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}><Trash2 size={16} style={{ marginRight: '6px' }} /> Delete</button>}
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
-                <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>
+                {canEdit && <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>}
               </div>
             </footer>
           </div>
