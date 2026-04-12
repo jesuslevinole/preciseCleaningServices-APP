@@ -337,7 +337,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  // --- FUNCIÓN FALTANTE AGREGADA AQUÍ ---
+  // --- LA FUNCIÓN FALTANTE FUE AGREGADA AQUÍ ---
   const handleDeletePayroll = async (id: string) => {
     if(!window.confirm("Delete this payment record?")) return;
     setIsSaving(true);
@@ -1095,11 +1095,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                               <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.95rem' }}>{emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown'}</div>
                               <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Date: {record.date}</div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontWeight: 700, color: '#10b981', fontSize: '1.1rem' }}>${record.totalAmount.toFixed(2)}</div>
-                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: record.status === 'Paid' ? '#10b981' : '#f59e0b' }}>
-                                {record.status || 'Pending'}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: 700, color: '#10b981', fontSize: '1.1rem' }}>${record.totalAmount.toFixed(2)}</div>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: record.status === 'Paid' ? '#10b981' : '#f59e0b' }}>
+                                  {record.status || 'Pending'}
+                                </div>
                               </div>
+                              <button onClick={() => handleDeletePayroll(record.id as string)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
+                                <Trash2 size={16} />
+                              </button>
                             </div>
                           </div>
                         );
@@ -1259,37 +1264,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
 
               </div>
-
-              {/* LISTA DE PAGOS PREVIOS EN EL FORMULARIO */}
-              {housePayrollRecords.length > 0 && (
-                <div style={{ marginTop: '32px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
-                  <h4 style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px' }}>Payment History for this property</h4>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {housePayrollRecords.map(record => {
-                      const emp = employees.find(e => e.id === record.employeeId);
-                      return (
-                        <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                          <div>
-                            <div style={{ fontWeight: 600, color: '#1e293b' }}>{emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown'}</div>
-                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Date: {record.date}</div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontWeight: 700, color: '#10b981' }}>${record.totalAmount.toFixed(2)}</div>
-                            </div>
-                            {/* --- ADDED MISSING FUNCTION --- */}
-                            <button onClick={() => handleDeletePayroll(record.id as string)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
             </div>
           </div>
         </div>

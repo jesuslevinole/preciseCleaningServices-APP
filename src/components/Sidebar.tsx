@@ -1,6 +1,6 @@
 import { 
   Building2, Home, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen, Users, CalendarDays,
-  ShieldCheck, UserPlus, LogOut 
+  ShieldCheck, UserPlus, LogOut, DollarSign 
 } from 'lucide-react';
 import { auth } from '../config/firebase';
 import { signOut } from 'firebase/auth';
@@ -31,8 +31,12 @@ export default function Sidebar({
     return permission ? permission.canView : false;
   };
 
-  // El acceso a Admin (Roles, Users, Settings) está dictado por el permiso "Settings" de la matriz
+  // El acceso a Admin (Roles, Users, Settings, Payroll) está dictado por permisos específicos
   const canViewAdmin = isSuperAdmin || canView('Settings');
+  
+  // Por ahora, permitimos que Admin o personas con permiso de Settings vean Payroll. 
+  // (Si en el futuro agregas un módulo "Payroll" a los roles, puedes cambiar canViewAdmin por canView('Payroll'))
+  const canViewPayroll = isSuperAdmin || canView('Settings'); 
 
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to log out?')) {
@@ -70,6 +74,14 @@ export default function Sidebar({
           <button className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`} onClick={() => setActiveTab('calendar')}>
             <CalendarDays size={20} className="nav-icon" />
             {isSidebarOpen && <span className="nav-text">Calendar</span>}
+          </button>
+        )}
+
+        {/* MÓDULO PAYROLL AÑADIDO AQUÍ */}
+        {canViewPayroll && (
+          <button className={`nav-item ${activeTab === 'payroll' ? 'active' : ''}`} onClick={() => setActiveTab('payroll')}>
+            <DollarSign size={20} className="nav-icon" />
+            {isSidebarOpen && <span className="nav-text">Payroll</span>}
           </button>
         )}
 
