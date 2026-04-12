@@ -11,7 +11,7 @@ import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
 import { customersService } from '../services/customersService';
 import { storageService } from '../services/storageService';
-import { payrollService } from '../services/payrollService'; // NUEVO SERVICIO
+import { payrollService } from '../services/payrollService';
 import { db } from '../config/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
@@ -175,7 +175,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [isAssigningWorker, setIsAssigningWorker] = useState(false);
   const [isAssigningWorkerForm, setIsAssigningWorkerForm] = useState(false);
 
-  // NUEVO: Estados para el subformulario de Pagos
+  // ESTADOS DE PAYROLL
   const [isPayrollModalOpen, setIsPayrollModalOpen] = useState(false);
   const [housePayrollRecords, setHousePayrollRecords] = useState<PayrollRecord[]>([]);
   const [payrollForm, setPayrollForm] = useState<PayrollRecord>({
@@ -310,19 +310,10 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   };
 
   // --- LÓGICA DE PAYROLL ---
-  const handleOpenPayrollForm = async (houseId: string) => {
+  const handleOpenPayrollForm = (houseId: string) => {
     if (!houseId) return alert("Must save the house first.");
-    setIsSaving(true);
-    try {
-      const records = await payrollService.getByPropertyId(houseId);
-      setHousePayrollRecords(records);
-      setPayrollForm({ propertyId: houseId, date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0 });
-      setIsPayrollModalOpen(true);
-    } catch (error) {
-      console.error("Error fetching payroll:", error);
-    } finally {
-      setIsSaving(false);
-    }
+    setPayrollForm({ propertyId: houseId, date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0 });
+    setIsPayrollModalOpen(true);
   };
 
   const handleSavePayroll = async () => {
@@ -331,15 +322,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     
     setIsSaving(true);
     try {
-      // Recalcular total por seguridad
       const total = Number(payrollForm.baseAmount) + Number(payrollForm.extraAmount) - Number(payrollForm.discountAmount);
-      const dataToSave = { ...payrollForm, totalAmount: total };
+      const dataToSave = { ...payrollForm, totalAmount: total, status: 'Pending' as const };
       
       const newId = await payrollService.create(dataToSave);
       setHousePayrollRecords([...housePayrollRecords, { ...dataToSave, id: newId }]);
-      
-      // Resetear form
-      setPayrollForm({ propertyId: selectedHouse?.id || '', date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0 });
+      setIsPayrollModalOpen(false);
       alert("Payment registered successfully.");
     } catch (error) {
       console.error("Error saving payroll:", error);
@@ -349,6 +337,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
+  // --- FUNCIÓN FALTANTE AGREGADA AQUÍ ---
   const handleDeletePayroll = async (id: string) => {
     if(!window.confirm("Delete this payment record?")) return;
     setIsSaving(true);
@@ -364,7 +353,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   };
 
   useEffect(() => {
-    // Calculo en vivo del Total a Pagar en el form de Payroll
     const total = Number(payrollForm.baseAmount || 0) + Number(payrollForm.extraAmount || 0) - Number(payrollForm.discountAmount || 0);
     setPayrollForm(prev => ({ ...prev, totalAmount: total }));
   }, [payrollForm.baseAmount, payrollForm.extraAmount, payrollForm.discountAmount]);
@@ -520,7 +508,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  const handleOpenDetail = (house: Property) => {
+  const handleOpenDetail = async (house: Property) => {
     setSelectedHouse(house);
     setIsAssigningWorker(false);
     setBeforeFiles([]);
@@ -528,6 +516,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setBeforePhotoURLs(house.beforePhotos || []);
     setAfterPhotoURLs(house.afterPhotos || []);
     setIsDetailModalOpen(true);
+
+    try {
+      const records = await payrollService.getByPropertyId(house.id);
+      setHousePayrollRecords(records);
+    } catch (error) {
+      console.error("Error fetching payroll records:", error);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'before' | 'after') => {
@@ -1088,6 +1083,31 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </div>
                 </div>
 
+                {canEdit && housePayrollRecords.length > 0 && (
+                  <div className="col-span-full" style={{ marginTop: '8px' }}>
+                    <h4 style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 700, marginBottom: '8px', textTransform: 'uppercase' }}>Registered Payments</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {housePayrollRecords.map(record => {
+                        const emp = employees.find(e => e.id === record.employeeId);
+                        return (
+                          <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                            <div>
+                              <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.95rem' }}>{emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown'}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Date: {record.date}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 700, color: '#10b981', fontSize: '1.1rem' }}>${record.totalAmount.toFixed(2)}</div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: record.status === 'Paid' ? '#10b981' : '#f59e0b' }}>
+                                {record.status || 'Pending'}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="col-span-full" style={{ marginTop: '10px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                     <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
@@ -1177,7 +1197,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
                 
-                {/* Selección del Empleado (solo muestra los asignados a la casa para no cometer errores) */}
                 <div>
                   <label style={s.label}>Employee <span style={{ color: '#3b82f6' }}>*</span></label>
                   <select 
@@ -1241,7 +1260,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
               </div>
 
-              {/* LISTA DE PAGOS PREVIOS */}
+              {/* LISTA DE PAGOS PREVIOS EN EL FORMULARIO */}
               {housePayrollRecords.length > 0 && (
                 <div style={{ marginTop: '32px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
                   <h4 style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px' }}>Payment History for this property</h4>
@@ -1259,6 +1278,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                             <div style={{ textAlign: 'right' }}>
                               <div style={{ fontWeight: 700, color: '#10b981' }}>${record.totalAmount.toFixed(2)}</div>
                             </div>
+                            {/* --- ADDED MISSING FUNCTION --- */}
                             <button onClick={() => handleDeletePayroll(record.id as string)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
                               <Trash2 size={16} />
                             </button>
