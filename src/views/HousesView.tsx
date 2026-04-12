@@ -2,15 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Search, MapPin, Plus, X, Edit2, Trash2, 
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
-  Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck
+  Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck, DollarSign
 } from 'lucide-react';
 
-import type { Property, Status, Team, Priority, Service, Customer, SystemUser, Role } from '../types/index';
+import type { Property, Status, Team, Priority, Service, Customer, SystemUser, Role, PayrollRecord } from '../types/index';
 
 import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
 import { customersService } from '../services/customersService';
 import { storageService } from '../services/storageService';
+import { payrollService } from '../services/payrollService'; // NUEVO SERVICIO
 import { db } from '../config/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
@@ -171,8 +172,15 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAssigningWorker, setIsAssigningWorker] = useState(false); // Modal Detalles
-  const [isAssigningWorkerForm, setIsAssigningWorkerForm] = useState(false); // Modal Formulario
+  const [isAssigningWorker, setIsAssigningWorker] = useState(false);
+  const [isAssigningWorkerForm, setIsAssigningWorkerForm] = useState(false);
+
+  // NUEVO: Estados para el subformulario de Pagos
+  const [isPayrollModalOpen, setIsPayrollModalOpen] = useState(false);
+  const [housePayrollRecords, setHousePayrollRecords] = useState<PayrollRecord[]>([]);
+  const [payrollForm, setPayrollForm] = useState<PayrollRecord>({
+    propertyId: '', date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0
+  });
 
   const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '',
@@ -186,7 +194,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const beforeInputRef = useRef<HTMLInputElement>(null);
   const afterInputRef = useRef<HTMLInputElement>(null);
 
-  // --- PERMISOS ---
   const canEdit = isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canEdit;
   const canDelete = isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canDelete;
 
@@ -223,40 +230,27 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   const snapshotToData = (snapshot: any) => snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 
-  // ========================================================
-  // LÓGICA DE FILTRADO POR SCOPE (OWN vs ALL)
-  // ========================================================
   const housePermission = activeRole?.permissions?.find(p => p.module === 'Houses');
   const userScope = isSuperAdmin ? 'All' : (housePermission?.scope || 'Own');
   
-  // 1. Filtrar Propiedades visibles
   const propertiesWithScope = properties.filter(prop => {
     if (userScope === 'All') return true;
     if (!currentUser) return false;
-    
-    // Es suya si él está en los assignedWorkers, O si la casa pertenece al mismo TeamId que el usuario
     const isAssigned = prop.assignedWorkers?.includes(currentUser.id);
     const isSameTeam = currentUser.teamId && (prop.teamId === currentUser.teamId);
-    
     return isAssigned || isSameTeam;
   });
 
-  // 2. Filtrar Equipos visibles (Panel de la derecha)
   const teamsWithScope = teams.filter(team => {
     if (userScope === 'All') return true;
     if (!currentUser) return false;
-    
-    // Si el scope es Own, el usuario solo puede ver tarjetas de su propio equipo
     return team.id === currentUser.teamId;
   });
 
-  // 3. Filtrar propiedades por Status Píldoras de arriba
   const filteredProperties = activeFilter === 'All' ? propertiesWithScope : propertiesWithScope.filter(p => {
     const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
     return st?.name === activeFilter;
   });
-
-  // ========================================================
 
   const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
     setIsSaving(true);
@@ -315,6 +309,67 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setFormData({ ...formData, assignedWorkers: newWorkersList });
   };
 
+  // --- LÓGICA DE PAYROLL ---
+  const handleOpenPayrollForm = async (houseId: string) => {
+    if (!houseId) return alert("Must save the house first.");
+    setIsSaving(true);
+    try {
+      const records = await payrollService.getByPropertyId(houseId);
+      setHousePayrollRecords(records);
+      setPayrollForm({ propertyId: houseId, date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0 });
+      setIsPayrollModalOpen(true);
+    } catch (error) {
+      console.error("Error fetching payroll:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSavePayroll = async () => {
+    if (!payrollForm.employeeId) return alert("Please select an employee.");
+    if (payrollForm.baseAmount <= 0) return alert("Base amount must be greater than 0.");
+    
+    setIsSaving(true);
+    try {
+      // Recalcular total por seguridad
+      const total = Number(payrollForm.baseAmount) + Number(payrollForm.extraAmount) - Number(payrollForm.discountAmount);
+      const dataToSave = { ...payrollForm, totalAmount: total };
+      
+      const newId = await payrollService.create(dataToSave);
+      setHousePayrollRecords([...housePayrollRecords, { ...dataToSave, id: newId }]);
+      
+      // Resetear form
+      setPayrollForm({ propertyId: selectedHouse?.id || '', date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0 });
+      alert("Payment registered successfully.");
+    } catch (error) {
+      console.error("Error saving payroll:", error);
+      alert("Error saving payment.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeletePayroll = async (id: string) => {
+    if(!window.confirm("Delete this payment record?")) return;
+    setIsSaving(true);
+    try {
+      await payrollService.delete(id);
+      setHousePayrollRecords(housePayrollRecords.filter(r => r.id !== id));
+    } catch(e) {
+      console.error(e);
+      alert("Error deleting record.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    // Calculo en vivo del Total a Pagar en el form de Payroll
+    const total = Number(payrollForm.baseAmount || 0) + Number(payrollForm.extraAmount || 0) - Number(payrollForm.discountAmount || 0);
+    setPayrollForm(prev => ({ ...prev, totalAmount: total }));
+  }, [payrollForm.baseAmount, payrollForm.extraAmount, payrollForm.discountAmount]);
+
+
   const s = {
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
@@ -352,7 +407,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   };
 
   const handleOpenForm = (house?: Property) => {
-    setIsAssigningWorkerForm(false); // Reinicia el desplegable
+    setIsAssigningWorkerForm(false);
     if (house) {
       setFormData(house);
     } else {
@@ -394,7 +449,10 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       let workingId = formData.id;
       let isNew = false;
       
-      const finalAssignedWorkers = formData.assignedWorkers || [];
+      let finalAssignedWorkers = formData.assignedWorkers || [];
+      if (formData.teamId && finalAssignedWorkers.length === 0) {
+        finalAssignedWorkers = employees.filter(emp => emp.teamId === formData.teamId).map(emp => emp.id);
+      }
 
       if (!workingId) {
         const { id, ...restOfData } = formData;
@@ -519,7 +577,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
   const kpiIcons = [Briefcase, Clock, ShieldCheck, AlertTriangle];
 
-  // Fecha en español
   const today = new Date();
   const dateFormatted = today.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const dateCapitalized = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1);
@@ -767,8 +824,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     options={teams} 
                     value={formData.teamId} 
                     onChange={(val: string) => {
-                      // AUTO-ASIGNACIÓN: Cuando seleccionan un equipo en el formulario, 
-                      // traemos los empleados de ese equipo como valor inicial a los assignedWorkers
                       const teamWorkers = employees.filter(emp => emp.teamId === val).map(emp => emp.id);
                       setFormData({ ...formData, teamId: val, assignedWorkers: teamWorkers });
                     }} 
@@ -801,14 +856,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   <CustomSelect options={roomOptions} value={formData.bathrooms} onChange={(val: string) => setFormData({ ...formData, bathrooms: val })} placeholder="Bathrooms..." icon={Hash} />
                 </div>
 
-                {/* NUEVO: SECCIÓN DE TRABAJADORES ASIGNADOS DENTRO DEL FORMULARIO */}
                 <div className="col-span-full" style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <span style={s.label}><User size={14} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}}/> Assigned Workers</span>
                     
                     <div style={{ position: 'relative' }}>
                       <button 
-                        type="button" // Evita que se envíe el formulario
+                        type="button" 
                         onClick={() => setIsAssigningWorkerForm(!isAssigningWorkerForm)} 
                         disabled={isSaving}
                         style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
@@ -896,6 +950,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                {canEdit && <button onClick={() => handleOpenPayrollForm(selectedHouse.id)} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><DollarSign size={14} /> Register Payment</button>}
                 {canEdit && <button onClick={handleDuplicate} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><Copy size={14} /> Duplicate</button>}
                 <button onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><ClipboardCheck size={14} /> Quality Check</button>
                 <button style={{ ...s.closeBtn, marginLeft: '8px' }} onClick={() => setIsDetailModalOpen(false)}><X size={24} /></button>
@@ -972,7 +1027,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </div>
                 </div>
 
-                {/* SECCIÓN DE TRABAJADORES ASIGNADOS (MODAL DETALLES) */}
                 <div className="col-span-full" style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <span style={s.detailLabel}><User size={14} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}}/> ASSIGNED WORKERS</span>
@@ -1034,7 +1088,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </div>
                 </div>
 
-                {/* PHOTO SECTIONS */}
                 <div className="col-span-full" style={{ marginTop: '10px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                     <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
@@ -1106,7 +1159,123 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
       )}
 
-      {/* --- NUEVO: TEAM OVERVIEW MODAL --- */}
+      {/* --- NUEVO: MODAL DE PAYROLL --- */}
+      {isPayrollModalOpen && selectedHouse && (
+        <div className="modal-overlay-centered" onClick={() => setIsPayrollModalOpen(false)} style={{ zIndex: 10000 }}>
+          <div className="modal-70" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+            <header style={s.header}>
+              <h3 style={s.title}>Register Payment</h3>
+              <button style={s.closeBtn} onClick={() => setIsPayrollModalOpen(false)}><X size={20} /></button>
+            </header>
+            
+            <div style={s.body}>
+              
+              <div style={{ padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>PROPERTY</div>
+                <div style={{ fontSize: '1rem', color: '#1e293b', fontWeight: 700 }}>{selectedHouse.client} - {selectedHouse.address}</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                
+                {/* Selección del Empleado (solo muestra los asignados a la casa para no cometer errores) */}
+                <div>
+                  <label style={s.label}>Employee <span style={{ color: '#3b82f6' }}>*</span></label>
+                  <select 
+                    style={{ ...s.input, cursor: 'pointer' }}
+                    value={payrollForm.employeeId}
+                    onChange={(e) => setPayrollForm({ ...payrollForm, employeeId: e.target.value })}
+                  >
+                    <option value="">Select an employee...</option>
+                    {employees.filter(emp => (selectedHouse.assignedWorkers || []).includes(emp.id)).map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
+                    ))}
+                  </select>
+                  {(!selectedHouse.assignedWorkers || selectedHouse.assignedWorkers.length === 0) && (
+                    <p style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '4px' }}>Please assign workers to this property first.</p>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={s.label}>Date <span style={{ color: '#3b82f6' }}>*</span></label>
+                    <input type="date" style={s.input} value={payrollForm.date} onChange={(e) => setPayrollForm({ ...payrollForm, date: e.target.value })} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={s.label}>Base Amount ($) <span style={{ color: '#3b82f6' }}>*</span></label>
+                    <input type="number" step="0.01" style={s.input} placeholder="0.00" value={payrollForm.baseAmount || ''} onChange={(e) => setPayrollForm({ ...payrollForm, baseAmount: Number(e.target.value) })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={s.label}>Extra ($)</label>
+                    <input type="number" step="0.01" style={s.input} placeholder="0.00" value={payrollForm.extraAmount || ''} onChange={(e) => setPayrollForm({ ...payrollForm, extraAmount: Number(e.target.value) })} />
+                  </div>
+                  <div style={{ flex: 2 }}>
+                    <label style={s.label}>Extra Note</label>
+                    <input type="text" style={s.input} placeholder="Reason for extra..." value={payrollForm.extraNote} onChange={(e) => setPayrollForm({ ...payrollForm, extraNote: e.target.value })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={s.label}>Discount ($)</label>
+                    <input type="number" step="0.01" style={s.input} placeholder="0.00" value={payrollForm.discountAmount || ''} onChange={(e) => setPayrollForm({ ...payrollForm, discountAmount: Number(e.target.value) })} />
+                  </div>
+                  <div style={{ flex: 2 }}>
+                    <label style={s.label}>Discount Note</label>
+                    <input type="text" style={s.input} placeholder="Reason for discount..." value={payrollForm.discountNote} onChange={(e) => setPayrollForm({ ...payrollForm, discountNote: e.target.value })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', backgroundColor: '#ecfdf5', border: '1px solid #10b981', borderRadius: '8px', marginTop: '8px' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: 700, color: '#047857' }}>TOTAL TO PAY:</span>
+                  <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#047857' }}>${payrollForm.totalAmount.toFixed(2)}</span>
+                </div>
+
+                <div style={{ textAlign: 'right', marginTop: '8px' }}>
+                  <button style={{ ...s.btnPrimary, backgroundColor: '#10b981', display: 'inline-flex' }} onClick={handleSavePayroll} disabled={isSaving}>
+                    {isSaving ? 'Processing...' : 'Save Payment'}
+                  </button>
+                </div>
+
+              </div>
+
+              {/* LISTA DE PAGOS PREVIOS */}
+              {housePayrollRecords.length > 0 && (
+                <div style={{ marginTop: '32px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                  <h4 style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px' }}>Payment History for this property</h4>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {housePayrollRecords.map(record => {
+                      const emp = employees.find(e => e.id === record.employeeId);
+                      return (
+                        <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#1e293b' }}>{emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown'}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Date: {record.date}</div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 700, color: '#10b981' }}>${record.totalAmount.toFixed(2)}</div>
+                            </div>
+                            <button onClick={() => handleDeletePayroll(record.id as string)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- TEAM OVERVIEW MODAL --- */}
       {selectedTeamView && (
         <div className="modal-overlay-centered" onClick={() => setSelectedTeamView(null)}>
           <div className="modal-70" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
@@ -1122,7 +1291,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             
             <div style={s.body}>
               
-              {/* Sección de Empleados */}
               <div>
                 <h4 style={{ margin: '0 0 12px 0', color: '#111827', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <UserCheck size={16} color="#3b82f6" /> Team Members
@@ -1148,7 +1316,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
               </div>
 
-              {/* Sección de Trabajos del Día */}
               <div style={{ marginTop: '16px' }}>
                 <h4 style={{ margin: '0 0 12px 0', color: '#111827', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Briefcase size={16} color="#f59e0b" /> Assigned Jobs Today
