@@ -356,7 +356,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setPayrollForm(prev => ({ ...prev, totalAmount: total }));
   }, [payrollForm.baseAmount, payrollForm.extraAmount, payrollForm.discountAmount]);
 
-
   const s = {
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
@@ -492,22 +491,34 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  // --- AQUÍ ESTÁ EL CAMBIO SOLICITADO ---
+  // --- ELIMINACIÓN EN CASCADA ---
   const handleDelete = async () => {
     if(!selectedHouse) return;
 
     // ALERTA DE CONFIRMACIÓN ANTES DE BORRAR LA CASA
-    const confirmDelete = window.confirm("Are you sure you want to completely delete this job? This action cannot be undone.");
+    const confirmDelete = window.confirm("Are you sure you want to completely delete this job and all its related payment records? This action cannot be undone.");
     if (!confirmDelete) return;
 
     setIsSaving(true);
     try {
+      // 1. Buscar y eliminar todos los registros de pago (Payroll) asociados a esta casa
+      const relatedPayrolls = await payrollService.getByPropertyId(selectedHouse.id);
+      if (relatedPayrolls.length > 0) {
+        await Promise.all(relatedPayrolls.map(record => payrollService.delete(record.id as string)));
+      }
+
+      // (Nota: Los reportes de Quality Check están mockeados por ahora, 
+      // cuando estén en BD habría que agregar su borrado aquí también).
+
+      // 2. Eliminar la casa
       await propertiesService.delete(selectedHouse.id);
+      
+      // 3. Actualizar el estado local
       setProperties(properties.filter(p => p.id !== selectedHouse.id));
       setIsDetailModalOpen(false);
     } catch (error) {
       console.error("Error deleting from Firebase:", error);
-      alert("Error trying to delete property.");
+      alert("Error trying to delete property and related records.");
     } finally {
       setIsSaving(false);
     }
