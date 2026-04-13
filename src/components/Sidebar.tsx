@@ -1,6 +1,6 @@
 import { 
-  Building2, Home, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen, Users, CalendarDays,
-  ShieldCheck, UserPlus, LogOut, DollarSign, ClipboardCheck 
+  Building2, Home, Settings as SettingsIcon, Users, CalendarDays,
+  ShieldCheck, UserPlus, LogOut, DollarSign, ClipboardCheck, X 
 } from 'lucide-react';
 import { auth } from '../config/firebase';
 import { signOut } from 'firebase/auth';
@@ -15,7 +15,7 @@ interface SidebarProps {
   setActiveTab: (tab: TabOptions) => void;
   onSettingsClick: () => void;
   activeRole: Role | null;
-  isSuperAdmin: boolean; 
+  isSuperAdmin: boolean;
 }
 
 export default function Sidebar({ 
@@ -32,8 +32,6 @@ export default function Sidebar({
 
   const canViewAdmin = isSuperAdmin || canView('Settings');
   const canViewPayroll = isSuperAdmin || canView('Settings'); 
-  
-  // Por ahora asociamos ver QC a ver Houses o ser Admin
   const canViewQC = isSuperAdmin || canView('Houses'); 
 
   const handleLogout = async () => {
@@ -43,94 +41,203 @@ export default function Sidebar({
     }
   };
 
+  // Función para cambiar de pestaña y cerrar el menú automáticamente en móviles
+  const handleNavClick = (tab: TabOptions) => {
+    setActiveTab(tab);
+    if (window.innerWidth <= 768) {
+      setIsSidebarOpen(false);
+    }
+  };
+
   return (
-    <aside className={`sidebar ${isSidebarOpen ? 'open' : 'collapsed'}`} style={{ display: 'flex', flexDirection: 'column' }}>
-      <div className="sidebar-header">
-        <div className="logo-container">
-          <div className="logo-icon"><Building2 size={20} color="white" /></div>
-          {isSidebarOpen && <span className="logo-text">Precise Cleaning</span>}
-        </div>
-      </div>
-      
-      <div className="sidebar-toggle-container">
-        <button className="sidebar-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-          {isSidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-        </button>
-      </div>
+    <>
+      <style>{`
+        /* Animaciones y Layout del Sidebar */
+        .sidebar-container {
+          background-color: #0f172a;
+          color: white;
+          display: flex;
+          flex-direction: column;
+          height: 100vh;
+          width: 260px;
+          transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          overflow-x: hidden;
+          flex-shrink: 0;
+          border-right: 1px solid rgba(255,255,255,0.05);
+        }
 
-      <nav className="sidebar-nav" style={{ flex: 1 }}>
-        {/* MÓDULOS OPERATIVOS */}
+        .sidebar-container.closed {
+          width: 80px; /* Tamaño colapsado en PC */
+        }
+
+        .mobile-close-btn {
+          display: none;
+        }
+
+        .sidebar-header {
+          padding: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          min-height: 70px;
+        }
+
+        .logo-container {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          overflow: hidden;
+          white-space: nowrap;
+        }
+
+        .nav-item {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding: 12px 20px;
+          color: #94a3b8;
+          cursor: pointer;
+          transition: all 0.2s;
+          border: none;
+          background: transparent;
+          width: 100%;
+          text-align: left;
+          font-size: 0.95rem;
+          font-weight: 500;
+          white-space: nowrap;
+        }
+
+        .nav-item:hover {
+          color: white;
+          background-color: rgba(255,255,255,0.05);
+        }
+
+        .nav-item.active {
+          color: #3b82f6;
+          background-color: rgba(59, 130, 246, 0.1);
+          border-right: 3px solid #3b82f6;
+        }
+
+        .menu-label {
+          color: #475569;
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          padding: 0 20px;
+          margin-bottom: 8px;
+        }
+
+        /* Comportamiento 100% responsivo para móviles */
+        @media (max-width: 768px) {
+          .sidebar-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw !important; /* 100% del ancho */
+            z-index: 10000;
+          }
+          .sidebar-container.closed {
+            transform: translateX(-100%);
+          }
+          .sidebar-container.open {
+            transform: translateX(0);
+          }
+          .mobile-close-btn {
+            display: flex;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+          }
+        }
+      `}</style>
+
+      <aside className={`sidebar-container ${isSidebarOpen ? 'open' : 'closed'}`}>
         
-        {canView('Houses') && (
-          <button className={`nav-item ${activeTab === 'houses' ? 'active' : ''}`} onClick={() => setActiveTab('houses')}>
-            <Home size={20} className="nav-icon" />
-            {isSidebarOpen && <span className="nav-text">Houses</span>}
+        <div className="sidebar-header">
+          <div className="logo-container">
+            <div className="logo-icon"><Building2 size={24} color="#3b82f6" /></div>
+            {isSidebarOpen && <span style={{ fontWeight: 700, fontSize: '1.2rem', color: 'white' }}>Precise Cleaning</span>}
+          </div>
+          {/* Botón X que solo aparece en móviles */}
+          <button className="mobile-close-btn" onClick={() => setIsSidebarOpen(false)}>
+            <X size={20} />
           </button>
-        )}
+        </div>
 
-        {canView('Calendar') && (
-          <button className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`} onClick={() => setActiveTab('calendar')}>
-            <CalendarDays size={20} className="nav-icon" />
-            {isSidebarOpen && <span className="nav-text">Calendar</span>}
-          </button>
-        )}
-
-        {/* MÓDULO QUALITY CHECK AÑADIDO AQUÍ */}
-        {canViewQC && (
-          <button className={`nav-item ${activeTab === 'qc_report' ? 'active' : ''}`} onClick={() => setActiveTab('qc_report')}>
-            <ClipboardCheck size={20} className="nav-icon" />
-            {isSidebarOpen && <span className="nav-text">Quality Check</span>}
-          </button>
-        )}
-
-        {canViewPayroll && (
-          <button className={`nav-item ${activeTab === 'payroll' ? 'active' : ''}`} onClick={() => setActiveTab('payroll')}>
-            <DollarSign size={20} className="nav-icon" />
-            {isSidebarOpen && <span className="nav-text">Payroll</span>}
-          </button>
-        )}
-
-        {canView('Customers') && (
-          <button className={`nav-item ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}>
-            <Users size={20} className="nav-icon" />
-            {isSidebarOpen && <span className="nav-text">Customers</span>}
-          </button>
-        )}
-
-        {/* SECCIÓN ADMIN */}
-        {canViewAdmin && (
-          <>
-            {isSidebarOpen && <div className="menu-label" style={{ marginTop: '20px' }}>ADMIN</div>}
-
-            <button className={`nav-item ${activeTab === 'roles' ? 'active' : ''}`} onClick={() => setActiveTab('roles')}>
-              <ShieldCheck size={20} className="nav-icon" />
-              {isSidebarOpen && <span className="nav-text">Roles & Permissions</span>}
+        <nav className="sidebar-nav" style={{ flex: 1, overflowY: 'auto', paddingTop: '10px' }}>
+          
+          {canView('Houses') && (
+            <button className={`nav-item ${activeTab === 'houses' ? 'active' : ''}`} onClick={() => handleNavClick('houses')}>
+              <Home size={20} className="nav-icon" />
+              {isSidebarOpen && <span className="nav-text">Houses</span>}
             </button>
+          )}
 
-            <button className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
-              <UserPlus size={20} className="nav-icon" />
-              {isSidebarOpen && <span className="nav-text">System Users</span>}
+          {canView('Calendar') && (
+            <button className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`} onClick={() => handleNavClick('calendar')}>
+              <CalendarDays size={20} className="nav-icon" />
+              {isSidebarOpen && <span className="nav-text">Calendar</span>}
             </button>
-            
-            <button className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={onSettingsClick}>
-              <SettingsIcon size={20} className="nav-icon" />
-              {isSidebarOpen && <span className="nav-text">Settings</span>}
-            </button>
-          </>
-        )}
-      </nav>
+          )}
 
-      {/* BOTÓN DE LOGOUT */}
-      <div style={{ padding: '16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-        <button 
-          onClick={handleLogout}
-          style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', backgroundColor: 'transparent', color: '#ef4444', width: '100%', fontWeight: 600, transition: 'background 0.2s' }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
-          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-        >
-          <LogOut size={18} /> {isSidebarOpen && "Log Out"}
-        </button>
-      </div>
-    </aside>
+          {canViewQC && (
+            <button className={`nav-item ${activeTab === 'qc_report' ? 'active' : ''}`} onClick={() => handleNavClick('qc_report')}>
+              <ClipboardCheck size={20} className="nav-icon" />
+              {isSidebarOpen && <span className="nav-text">Quality Check</span>}
+            </button>
+          )}
+
+          {canViewPayroll && (
+            <button className={`nav-item ${activeTab === 'payroll' ? 'active' : ''}`} onClick={() => handleNavClick('payroll')}>
+              <DollarSign size={20} className="nav-icon" />
+              {isSidebarOpen && <span className="nav-text">Payroll</span>}
+            </button>
+          )}
+
+          {canView('Customers') && (
+            <button className={`nav-item ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => handleNavClick('customers')}>
+              <Users size={20} className="nav-icon" />
+              {isSidebarOpen && <span className="nav-text">Customers</span>}
+            </button>
+          )}
+
+          {canViewAdmin && (
+            <>
+              {isSidebarOpen && <div className="menu-label" style={{ marginTop: '24px' }}>ADMIN</div>}
+
+              <button className={`nav-item ${activeTab === 'roles' ? 'active' : ''}`} onClick={() => handleNavClick('roles')}>
+                <ShieldCheck size={20} className="nav-icon" />
+                {isSidebarOpen && <span className="nav-text">Roles & Permissions</span>}
+              </button>
+
+              <button className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => handleNavClick('users')}>
+                <UserPlus size={20} className="nav-icon" />
+                {isSidebarOpen && <span className="nav-text">System Users</span>}
+              </button>
+              
+              <button className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { onSettingsClick(); if (window.innerWidth <= 768) setIsSidebarOpen(false); }}>
+                <SettingsIcon size={20} className="nav-icon" />
+                {isSidebarOpen && <span className="nav-text">Settings</span>}
+              </button>
+            </>
+          )}
+        </nav>
+
+        {/* BOTÓN DE LOGOUT */}
+        <div style={{ padding: '20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <button 
+            onClick={handleLogout}
+            style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '0.95rem', backgroundColor: 'transparent', color: '#ef4444', width: '100%', fontWeight: 600, transition: 'background 0.2s' }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <LogOut size={20} /> {isSidebarOpen && "Log Out"}
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

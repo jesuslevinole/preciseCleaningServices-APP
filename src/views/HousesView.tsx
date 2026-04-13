@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Search, MapPin, Plus, X, Edit2, Trash2, 
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
-  Bell, Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck, DollarSign
+  Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck, DollarSign
 } from 'lucide-react';
 
 import type { Property, Status, Team, Priority, Service, Customer, SystemUser, Role, PayrollRecord } from '../types/index';
@@ -491,29 +491,21 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  // --- ELIMINACIÓN EN CASCADA ---
   const handleDelete = async () => {
     if(!selectedHouse) return;
 
-    // ALERTA DE CONFIRMACIÓN ANTES DE BORRAR LA CASA
     const confirmDelete = window.confirm("Are you sure you want to completely delete this job and all its related payment records? This action cannot be undone.");
     if (!confirmDelete) return;
 
     setIsSaving(true);
     try {
-      // 1. Buscar y eliminar todos los registros de pago (Payroll) asociados a esta casa
       const relatedPayrolls = await payrollService.getByPropertyId(selectedHouse.id);
       if (relatedPayrolls.length > 0) {
         await Promise.all(relatedPayrolls.map(record => payrollService.delete(record.id as string)));
       }
 
-      // (Nota: Los reportes de Quality Check están mockeados por ahora, 
-      // cuando estén en BD habría que agregar su borrado aquí también).
-
-      // 2. Eliminar la casa
       await propertiesService.delete(selectedHouse.id);
       
-      // 3. Actualizar el estado local
       setProperties(properties.filter(p => p.id !== selectedHouse.id));
       setIsDetailModalOpen(false);
     } catch (error) {
@@ -600,7 +592,38 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         @media (min-width: 769px) { .modal-70 { width: 70%; } }
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
+        
+        /* Responsive View Headers */
+        .view-header-title-group {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .hamburger-btn {
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          padding: 8px 12px;
+          cursor: pointer;
+          color: #111827;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .hamburger-btn:hover {
+          background-color: #f8fafc;
+        }
+
         @media (max-width: 768px) {
+          .view-header-title-group {
+            flex-direction: row-reverse;
+            justify-content: space-between;
+            width: 100%;
+          }
           .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
           .responsive-table thead { display: none; }
           .responsive-table tr { display: flex; flex-direction: column; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 16px; padding: 16px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
@@ -612,25 +635,22 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       `}</style>
 
       {/* DASHBOARD HEADER */}
-      <header className="main-header dashboard-header-container">
-        <div className="header-titles">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Open menu">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-            </button>
+      <header className="main-header dashboard-header-container" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+        <div className="view-header-title-group">
+          <button className="hamburger-btn" onClick={onOpenMenu} aria-label="Open menu">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </button>
+          <div>
             <h1 style={{ margin: 0, color: '#111827', fontSize: '1.8rem', fontWeight: 700 }}>Dashboard</h1>
+            <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>General operations overview</p>
           </div>
-          <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>General operations overview</p>
         </div>
 
-        <div className="dashboard-actions-wrapper">
+        <div className="dashboard-actions-wrapper" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <div className="search-box-container" style={{ display: 'flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '0 16px', height: '42px', flex: 1, minWidth: '200px' }}>
             <Search size={16} color="#9ca3af" />
             <input type="text" placeholder="Search job..." style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', padding: '10px', fontSize: '0.9rem', width: '100%', color: '#111827' }} />
           </div>
-          <button className="bell-btn-mobile" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6b7280', flexShrink: 0 }}>
-            <Bell size={18} />
-          </button>
           
           {(isSuperAdmin || activeRole?.permissions?.find(p => p.module === 'Houses')?.canAdd) && (
             <button className="add-btn-mobile" onClick={() => handleOpenForm()} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#111827', color: 'white', border: 'none', padding: '0 20px', height: '42px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0 }}>
