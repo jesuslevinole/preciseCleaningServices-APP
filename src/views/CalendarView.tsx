@@ -119,7 +119,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('week'); // Selector de vistas
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month'); // Selector de vistas, default Month para ver el arreglo
 
   // --- MODAL STATES ---
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -429,15 +429,19 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
         
+        /* Ajustes Responsivos */
         @media (max-width: 768px) {
           .view-header-title-group { flex-direction: row-reverse; justify-content: space-between; width: 100%; }
           .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
           
-          /* SOLO APLICA AL MES EL APILAMIENTO VERTICAL */
-          .calendar-body-grid { display: flex; flex-direction: column; gap: 0; }
-          .calendar-header-grid { display: none; }
-          .calendar-day-cell { min-height: auto; border-bottom: 1px solid #e5e7eb; }
-          .calendar-day-cell.empty { display: none; }
+          /* En vista de mes, PERMITIR SCROLL HORIZONTAL en vez de colapsar verticalmente */
+          .month-scroll-container {
+            overflow-x: auto;
+            width: 100%;
+          }
+          .month-grid-inner {
+            min-width: 800px; /* Fuerza el ancho mínimo para mantener la cuadrícula de 7 días */
+          }
         }
       `}</style>
 
@@ -476,26 +480,28 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
       ) : (
         <div className="calendar-wrapper">
           
-          {/* === VISTA DE MES (Original) === */}
+          {/* === VISTA DE MES === */}
           {viewMode === 'month' && (
-            <>
-              <div className="calendar-header-grid">
-                {weekDaysLabels.map(day => <div key={day} className="calendar-header-cell">{day}</div>)}
-              </div>
-              <div className="calendar-body-grid">
-                {calendarDays.map((date, index) => {
-                  if (!date) return <div key={`empty-${index}`} className="calendar-day-cell empty"></div>;
-                  return (
-                    <div key={date.toISOString()} className="calendar-day-cell">
-                      <div className="calendar-date-number">
-                        <span>{date.getDate()}</span>
+            <div className="month-scroll-container">
+              <div className="month-grid-inner">
+                <div className="calendar-header-grid">
+                  {weekDaysLabels.map(day => <div key={day} className="calendar-header-cell">{day}</div>)}
+                </div>
+                <div className="calendar-body-grid">
+                  {calendarDays.map((date, index) => {
+                    if (!date) return <div key={`empty-${index}`} className="calendar-day-cell empty"></div>;
+                    return (
+                      <div key={date.toISOString()} className="calendar-day-cell">
+                        <div className="calendar-date-number">
+                          <span>{date.getDate()}</span>
+                        </div>
+                        {renderEventBlocks(date)}
                       </div>
-                      {renderEventBlocks(date)}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* === VISTA DE SEMANA / DÍA (Estilo Google Calendar) === */}
