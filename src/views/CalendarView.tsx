@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   ChevronLeft, ChevronRight, X, Edit2, Trash2, 
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck, MapPin
 } from 'lucide-react';
-import type { Property, Status, Team, Priority, Service, Customer } from '../types';
+import type { Property, Status, Team, Priority, Service, Customer } from '../types/index';
 
 // --- FIREBASE SERVICES ---
 import { propertiesService } from '../services/propertiesService';
@@ -18,11 +18,10 @@ const collectionMap: Record<string, string> = {
   service: 'settings_services',
 };
 
-// --- CUSTOM COMPONENTS & HELPERS (A Prueba de Balas) ---
+// --- CUSTOM COMPONENTS & HELPERS ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   
-  // Búsqueda inteligente: ignora mayúsculas y espacios para compatibilidad con registros viejos
   const safeValue = String(value || '').toLowerCase().trim();
   const selected = options.find((o: any) => 
     String(o.id).toLowerCase().trim() === safeValue || 
@@ -30,7 +29,7 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
   );
 
   return (
-    <div tabIndex={0} onBlur={() => setIsOpen(false)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
+    <div tabIndex={0} onBlur={() => setTimeout(() => setIsOpen(false), 200)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', position: 'relative' }}
@@ -68,24 +67,28 @@ const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, retur
   );
 };
 
-// Funciones de mapeo seguras
 const getRelationName = (list: any[], idOrName: string, fallback = '-') => {
   if (!idOrName) return fallback;
   const safeVal = String(idOrName).toLowerCase().trim();
-  const found = list.find(item => 
-    String(item.id).toLowerCase().trim() === safeVal || 
-    String(item.name).toLowerCase().trim() === safeVal
-  );
+  const found = list.find(item => String(item.id).toLowerCase().trim() === safeVal || String(item.name).toLowerCase().trim() === safeVal);
   return found ? found.name : fallback;
 };
 
 const getRelationColor = (list: any[], idOrName: string) => {
   if (!idOrName) return undefined;
   const safeVal = String(idOrName).toLowerCase().trim();
-  return list.find(item => 
-    String(item.id).toLowerCase().trim() === safeVal || 
-    String(item.name).toLowerCase().trim() === safeVal
-  )?.color;
+  return list.find(item => String(item.id).toLowerCase().trim() === safeVal || String(item.name).toLowerCase().trim() === safeVal)?.color;
+};
+
+// --- TIME CALCULATION HELPERS ---
+const START_HOUR = 6; // El calendario empieza a las 6 AM
+const PIXELS_PER_HOUR = 60; // 1 hora = 60px de alto
+
+const parseTimeToMinutes = (timeStr: string) => {
+  if (!timeStr) return null;
+  const [h, m] = timeStr.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
 };
 
 interface CalendarViewProps {
@@ -108,6 +111,7 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('week'); // Nuevo estado para la vista
 
   // --- MODAL STATES ---
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -148,8 +152,21 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
   }, []);
 
   // --- CALENDAR LOGIC ---
-  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  const prevTime = () => {
+    const newDate = new Date(currentDate);
+    if (viewMode === 'month') newDate.setMonth(newDate.getMonth() - 1);
+    if (viewMode === 'week') newDate.setDate(newDate.getDate() - 7);
+    if (viewMode === 'day') newDate.setDate(newDate.getDate() - 1);
+    setCurrentDate(newDate);
+  };
+  
+  const nextTime = () => {
+    const newDate = new Date(currentDate);
+    if (viewMode === 'month') newDate.setMonth(newDate.getMonth() + 1);
+    if (viewMode === 'week') newDate.setDate(newDate.getDate() + 7);
+    if (viewMode === 'day') newDate.setDate(newDate.getDate() + 1);
+    setCurrentDate(newDate);
+  };
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -158,20 +175,41 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
     const lastDay = new Date(year, month + 1, 0);
     const days = [];
     
-    for (let i = 0; i < firstDay.getDay(); i++) {
-      days.push(null);
-    }
-    for (let i = 1; i <= lastDay.getDate(); i++) {
-      days.push(new Date(year, month, i));
-    }
+    for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
+    for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
     return days;
   };
 
+  const getStartOfWeek = (d: Date) => {
+    const date = new Date(d);
+    const day = date.getDay();
+    const diff = date.getDate() - day;
+    return new Date(date.setDate(diff));
+  };
+
+  const getDaysInWeek = (date: Date) => {
+    const start = getStartOfWeek(date);
+    return Array.from({ length: 7 }).map((_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+  };
+
   const calendarDays = getDaysInMonth(currentDate);
-  
-  const monthNameRaw = currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
-  const monthName = monthNameRaw.charAt(0).toUpperCase() + monthNameRaw.slice(1);
-  const weekDays = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const weekDaysDates = getDaysInWeek(currentDate);
+  const hoursOfDay = Array.from({ length: 18 }).map((_, i) => i + START_HOUR); // 6 AM a 11 PM
+
+  // Dynamic Header Title
+  const getHeaderTitle = () => {
+    if (viewMode === 'month') return currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+    if (viewMode === 'day') return currentDate.toLocaleString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (viewMode === 'week') {
+      const start = weekDaysDates[0];
+      const end = weekDaysDates[6];
+      return `${start.getDate()} ${start.toLocaleString('es-ES', {month: 'short'})} - ${end.getDate()} ${end.toLocaleString('es-ES', {month: 'short', year: 'numeric'})}`;
+    }
+    return '';
+  };
+  const headerTitleRaw = getHeaderTitle();
+  const headerTitle = headerTitleRaw.charAt(0).toUpperCase() + headerTitleRaw.slice(1);
+  const weekDaysLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
   // --- MODAL HANDLERS ---
   const handleOpenForm = (house?: Property) => {
@@ -235,6 +273,9 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
 
   const handleDelete = async () => {
     if(!selectedHouse) return;
+    const confirmDelete = window.confirm("Are you sure you want to completely delete this job?");
+    if (!confirmDelete) return;
+
     setIsSaving(true);
     try {
       await propertiesService.delete(selectedHouse.id);
@@ -250,6 +291,63 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
 
   const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
   const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
+
+  // --- RENDER HELPERS ---
+  const renderEventBlocks = (date: Date) => {
+    const offset = date.getTimezoneOffset();
+    const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+    const dateString = localDate.toISOString().split('T')[0];
+
+    const dailyJobs = propertiesList.filter(p => (p.scheduleDate || p.receiveDate) === dateString);
+
+    if (viewMode === 'month') {
+      // ESTILO MES: Simple stack de eventos
+      return dailyJobs.map(job => {
+        const statusColor = getRelationColor(statuses, job.statusId) || '#cbd5e1';
+        return (
+          <div 
+            key={job.id} 
+            className="calendar-event-month"
+            style={{ backgroundColor: `${statusColor}15`, color: '#1e293b', borderLeft: `3px solid ${statusColor}` }}
+            onClick={(e) => { e.stopPropagation(); setSelectedHouse(job); setIsDetailModalOpen(true); }}
+          >
+            <span style={{ fontWeight: 700 }}>{job.timeIn || '--:--'}</span> {job.client}
+          </div>
+        );
+      });
+    }
+
+    // ESTILO GOOGLE CALENDAR (DÍA Y SEMANA): Posicionamiento Absoluto
+    return dailyJobs.map(job => {
+      const statusColor = getRelationColor(statuses, job.statusId) || '#3b82f6';
+      
+      const startMin = parseTimeToMinutes(job.timeIn) || (8 * 60); // Default 8 AM
+      let endMin = parseTimeToMinutes(job.timeOut);
+      
+      if (!endMin || endMin <= startMin) endMin = startMin + 60; // Si no hay fin, asume 1 hora
+      
+      const topOffset = ((startMin - (START_HOUR * 60)) / 60) * PIXELS_PER_HOUR;
+      const height = ((endMin - startMin) / 60) * PIXELS_PER_HOUR;
+
+      return (
+        <div 
+          key={job.id} 
+          className="calendar-event-absolute"
+          style={{ 
+            top: `${topOffset}px`, 
+            height: `${height}px`,
+            backgroundColor: `${statusColor}20`, 
+            border: `1px solid ${statusColor}50`,
+            borderLeft: `4px solid ${statusColor}`
+          }}
+          onClick={(e) => { e.stopPropagation(); setSelectedHouse(job); setIsDetailModalOpen(true); }}
+        >
+          <div className="event-title">{job.client}</div>
+          <div className="event-time">{job.timeIn} - {job.timeOut || '?'}</div>
+        </div>
+      );
+    });
+  };
 
   // --- STYLES OBJECT ---
   const s = {
@@ -279,9 +377,16 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
   return (
     <div className="fade-in" style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
       
-      {/* INJECTED CALENDAR CSS */}
+      {/* INJECTED CALENDAR CSS PARA LAS VISTAS GOOGLE CALENDAR Y MES */}
       <style>{`
         .calendar-wrapper { display: flex; flex-direction: column; flex: 1; background: white; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
+        
+        /* Controles de vista */
+        .view-toggles { display: flex; background: #f1f5f9; border-radius: 8px; padding: 4px; border: 1px solid #e2e8f0; }
+        .view-btn { padding: 6px 16px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; border: none; cursor: pointer; color: #64748b; background: transparent; transition: all 0.2s; }
+        .view-btn.active { background: white; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+        /* Mes View */
         .calendar-header-grid { display: grid; grid-template-columns: repeat(7, 1fr); background-color: #f8fafc; border-bottom: 1px solid #e5e7eb; }
         .calendar-header-cell { padding: 12px; text-align: center; font-weight: 600; font-size: 0.85rem; color: #64748b; text-transform: uppercase; }
         .calendar-body-grid { display: grid; grid-template-columns: repeat(7, 1fr); flex: 1; background-color: #e5e7eb; gap: 1px; }
@@ -289,9 +394,23 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
         .calendar-day-cell:hover { background-color: #f8fafc; }
         .calendar-day-cell.empty { background-color: #f9fafb; cursor: default; }
         .calendar-date-number { font-weight: 600; font-size: 0.95rem; color: #1e293b; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+        .calendar-event-month { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid rgba(0,0,0,0.05); }
+        .calendar-event-month:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); filter: brightness(0.95); }
+
+        /* Time Grid (Día / Semana) */
+        .time-grid-container { display: flex; flex: 1; overflow-y: auto; position: relative; }
+        .time-axis { width: 60px; flex-shrink: 0; background: white; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; }
+        .time-label { height: 60px; padding-right: 8px; text-align: right; font-size: 0.75rem; color: #64748b; border-bottom: 1px solid #f1f5f9; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: flex-end; padding-top: 4px;}
+        .day-columns-wrapper { display: flex; flex: 1; }
+        .day-column-time { flex: 1; border-right: 1px solid #e5e7eb; position: relative; min-width: 120px; }
+        .day-column-time:last-child { border-right: none; }
+        .hour-grid-line { height: 60px; border-bottom: 1px solid #f1f5f9; box-sizing: border-box; width: 100%; }
         
-        .calendar-event { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid rgba(0,0,0,0.05); }
-        .calendar-event:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); filter: brightness(0.95); }
+        /* Eventos Absolutos (Google Calendar Style) */
+        .calendar-event-absolute { position: absolute; left: 4px; right: 4px; border-radius: 6px; padding: 6px 8px; font-size: 0.75rem; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10; cursor: pointer; transition: transform 0.1s, filter 0.2s; display: flex; flex-direction: column; gap: 2px; }
+        .calendar-event-absolute:hover { transform: scale(1.02); z-index: 20; filter: brightness(0.95); }
+        .calendar-event-absolute .event-title { font-weight: 700; color: #0f172a; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;}
+        .calendar-event-absolute .event-time { font-size: 0.7rem; color: #475569; }
 
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
@@ -301,6 +420,8 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
           .calendar-header-grid { display: none; }
           .calendar-day-cell { min-height: auto; border-bottom: 1px solid #e5e7eb; }
           .calendar-day-cell.empty { display: none; }
+          .day-columns-wrapper { flex-direction: column; }
+          .day-column-time { min-height: 500px; border-bottom: 2px solid #cbd5e1; }
         }
       `}</style>
 
@@ -316,58 +437,91 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'white', padding: '6px 12px', borderRadius: '24px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-          <button onClick={prevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronLeft size={20}/></button>
-          <span style={{ fontWeight: 700, color: '#1e293b', minWidth: '130px', textAlign: 'center', textTransform: 'capitalize' }}>{monthName}</span>
-          <button onClick={nextMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronRight size={20}/></button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+          {/* VIEW TOGGLES */}
+          <div className="view-toggles">
+            <button className={`view-btn ${viewMode === 'day' ? 'active' : ''}`} onClick={() => setViewMode('day')}>Day</button>
+            <button className={`view-btn ${viewMode === 'week' ? 'active' : ''}`} onClick={() => setViewMode('week')}>Week</button>
+            <button className={`view-btn ${viewMode === 'month' ? 'active' : ''}`} onClick={() => setViewMode('month')}>Month</button>
+          </div>
+
+          {/* DATE NAVIGATION */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'white', padding: '6px 12px', borderRadius: '24px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+            <button onClick={prevTime} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronLeft size={20}/></button>
+            <span style={{ fontWeight: 700, color: '#1e293b', minWidth: '160px', textAlign: 'center', textTransform: 'capitalize', fontSize: '0.9rem' }}>{headerTitle}</span>
+            <button onClick={nextTime} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', color: '#64748b' }}><ChevronRight size={20}/></button>
+          </div>
         </div>
       </header>
 
-      {/* CALENDAR GRID */}
+      {/* CALENDAR RENDER */}
       {isLoading ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>Loading calendar data...</div>
       ) : (
         <div className="calendar-wrapper">
-          <div className="calendar-header-grid">
-            {weekDays.map(day => <div key={day} className="calendar-header-cell">{day}</div>)}
-          </div>
-          <div className="calendar-body-grid">
-            {calendarDays.map((date, index) => {
-              if (!date) return <div key={`empty-${index}`} className="calendar-day-cell empty"></div>;
-              
-              const offset = date.getTimezoneOffset()
-              const localDate = new Date(date.getTime() - (offset*60*1000))
-              const dateString = localDate.toISOString().split('T')[0]
-              
-              const dailyJobs = propertiesList.filter(p => {
-                const jobDate = p.scheduleDate || p.receiveDate;
-                return jobDate === dateString;
-              });
-
-              return (
-                <div key={dateString} className="calendar-day-cell">
-                  <div className="calendar-date-number">
-                    <span>{date.getDate()}</span>
-                  </div>
-                  
-                  {dailyJobs.map(job => {
-                    const statusColor = getRelationColor(statuses, job.statusId) || '#cbd5e1';
-                    return (
-                      <div 
-                        key={job.id} 
-                        className="calendar-event"
-                        style={{ backgroundColor: `${statusColor}15`, color: '#1e293b', borderLeft: `3px solid ${statusColor}` }}
-                        onClick={() => { setSelectedHouse(job); setIsDetailModalOpen(true); }}
-                      >
-                        <span style={{ fontWeight: 700 }}>{job.timeIn || '--:--'}</span>
-                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden' }}>{job.client}</span>
+          
+          {/* === VISTA DE MES (Original) === */}
+          {viewMode === 'month' && (
+            <>
+              <div className="calendar-header-grid">
+                {weekDaysLabels.map(day => <div key={day} className="calendar-header-cell">{day}</div>)}
+              </div>
+              <div className="calendar-body-grid">
+                {calendarDays.map((date, index) => {
+                  if (!date) return <div key={`empty-${index}`} className="calendar-day-cell empty"></div>;
+                  return (
+                    <div key={date.toISOString()} className="calendar-day-cell">
+                      <div className="calendar-date-number">
+                        <span>{date.getDate()}</span>
                       </div>
-                    )
-                  })}
+                      {renderEventBlocks(date)}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* === VISTA DE SEMANA / DÍA (Estilo Google Calendar) === */}
+          {(viewMode === 'week' || viewMode === 'day') && (
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+              
+              {/* Header de la semana/día */}
+              <div className="calendar-header-grid" style={{ paddingLeft: '60px', display: 'flex' }}>
+                {(viewMode === 'week' ? weekDaysDates : [currentDate]).map((date, i) => (
+                  <div key={i} style={{ flex: 1, padding: '12px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>{weekDaysLabels[date.getDay()]}</div>
+                    <div style={{ fontSize: '1.2rem', color: '#1e293b', fontWeight: 800, marginTop: '2px' }}>{date.getDate()}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Grid Horario */}
+              <div className="time-grid-container">
+                {/* Eje Y de Horas */}
+                <div className="time-axis">
+                  {hoursOfDay.map(h => (
+                    <div key={`h-${h}`} className="time-label">
+                      {h > 12 ? `${h-12} PM` : h === 12 ? '12 PM' : `${h} AM`}
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
+
+                {/* Columnas de Días */}
+                <div className="day-columns-wrapper">
+                  {(viewMode === 'week' ? weekDaysDates : [currentDate]).map((date, i) => (
+                    <div key={`day-${i}`} className="day-column-time">
+                      {/* Líneas de fondo */}
+                      {hoursOfDay.map(h => <div key={`bg-${h}`} className="hour-grid-line"></div>)}
+                      {/* Eventos Posicionados */}
+                      {renderEventBlocks(date)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 

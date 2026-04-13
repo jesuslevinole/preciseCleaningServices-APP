@@ -337,7 +337,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  // --- LA FUNCIÓN FALTANTE FUE AGREGADA AQUÍ ---
   const handleDeletePayroll = async (id: string) => {
     if(!window.confirm("Delete this payment record?")) return;
     setIsSaving(true);
@@ -493,8 +492,14 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
+  // --- AQUÍ ESTÁ EL CAMBIO SOLICITADO ---
   const handleDelete = async () => {
     if(!selectedHouse) return;
+
+    // ALERTA DE CONFIRMACIÓN ANTES DE BORRAR LA CASA
+    const confirmDelete = window.confirm("Are you sure you want to completely delete this job? This action cannot be undone.");
+    if (!confirmDelete) return;
+
     setIsSaving(true);
     try {
       await propertiesService.delete(selectedHouse.id);

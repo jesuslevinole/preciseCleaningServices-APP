@@ -1,20 +1,9 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardCheck, X, Camera, MapPin, CalendarDays, Activity, FileText, User // Bórramos 'Search' de aquí
+  ClipboardCheck, X, Camera, MapPin, CalendarDays, Activity, FileText, User 
 } from 'lucide-react';
-import type { Property } from '../types';
-
-// Interfaces Locales para el Quality Check
-interface QCTask {
-  id: string;
-  name: string;
-}
-
-interface QCPlace {
-  id: string;
-  name: string;
-  tasks: QCTask[];
-}
+import type { Property, SystemUser, Place, Task } from '../types/index';
+import { settingsService } from '../services/settingsService';
 
 interface QCRecord {
   id: string;
@@ -23,56 +12,76 @@ interface QCRecord {
   address: string;
   client: string;
   status: 'Finished' | 'Pending';
+  inspector?: string;
 }
-
-// --- Mocks para sustituir el Excel ---
-const mockPlaces: QCPlace[] = [
-  { 
-    id: 'p1', name: 'Kitchen', 
-    tasks: [{id: 't1', name: 'Clean countertops'}, {id: 't2', name: 'Empty trash'}, {id: 't3', name: 'Clean inside microwave'}] 
-  },
-  { 
-    id: 'p2', name: 'Master Bathroom', 
-    tasks: [{id: 't4', name: 'Clean mirrors'}, {id: 't5', name: 'Scrub tub/shower'}, {id: 't6', name: 'Mop floors'}] 
-  }
-];
 
 // Simulamos que ya hay reportes creados previamente
 const mockPastQCs: QCRecord[] = [
-  { id: 'qc-1', houseId: '1', date: '2026-03-20', address: '1405 Fairbanks St, Copperas Cove', client: 'Janina A.', status: 'Finished' },
-  { id: 'qc-2', houseId: '3', date: '2026-03-22', address: '3402 S W S Young Dr, Killeen', client: 'Linnemann', status: 'Pending' }
+  { id: 'qc-1', houseId: '1', date: '2026-03-20', address: '1405 Fairbanks St, Copperas Cove', client: 'Janina A.', status: 'Finished', inspector: 'Jesus Molero' },
+  { id: 'qc-2', houseId: '3', date: '2026-03-22', address: '3402 S W S Young Dr, Killeen', client: 'Linnemann', status: 'Pending', inspector: 'Astrid Flores' }
 ];
 
 interface QualityCheckViewProps {
   onOpenMenu: () => void;
-  properties: Property[]; // Lo mantenemos en la interfaz para que App.tsx no dé error al enviarlo
+  properties: Property[]; // Lo mantenemos en la interfaz para que App.tsx no se queje
   houseToInspect: Property | null;
   clearHouseToInspect: () => void;
+  currentUser?: SystemUser | null;
 }
 
-// Eliminamos 'properties' de la desestructuración porque no se usa dentro del componente
-export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHouseToInspect }: QualityCheckViewProps) {
+// Quitamos 'properties' de aquí adentro para eliminar la alerta de "never read"
+export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHouseToInspect, currentUser }: QualityCheckViewProps) {
   const [qcList, setQcList] = useState<QCRecord[]>(mockPastQCs);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
 
-  // Estructura de estado complejo para replicar tu HTML de AppScript
+  // Estados para los catálogos dinámicos
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(true);
+
+  // Estructura de estado complejo
   const [qcData, setQcData] = useState<Record<string, any>>({});
+
+  // 1. CARGAMOS LOS PLACES Y TASKS DESDE FIREBASE
+  useEffect(() => {
+    const fetchCatalogs = async () => {
+      setIsLoadingCatalogs(true);
+      try {
+        const [placesData, tasksData] = await Promise.all([
+          settingsService.getAll('settings_places').catch(() => []),
+          settingsService.getAll('settings_tasks').catch(() => [])
+        ]);
+
+        // 2. ORDENAMOS ALFABÉTICAMENTE
+        const sortedPlaces = (placesData as Place[]).sort((a, b) => a.name.localeCompare(b.name));
+        const sortedTasks = (tasksData as Task[]).sort((a, b) => a.name.localeCompare(b.name));
+
+        setPlaces(sortedPlaces);
+        setTasks(sortedTasks);
+      } catch (error) {
+        console.error("Error loading QC catalogs:", error);
+      } finally {
+        setIsLoadingCatalogs(false);
+      }
+    };
+    fetchCatalogs();
+  }, []);
 
   // Efecto para abrir el modal si venimos de darle al botón "Check" en HousesView
   useEffect(() => {
-    if (houseToInspect) {
+    if (houseToInspect && !isLoadingCatalogs) {
       handleOpenForm(houseToInspect);
-      clearHouseToInspect(); // Limpiamos para que no se re-abra si cerramos el modal
+      clearHouseToInspect();
     }
-  }, [houseToInspect]);
+  }, [houseToInspect, isLoadingCatalogs]);
 
   const handleOpenForm = (house: Property) => {
     setSelectedHouse(house);
     
-    // Inicializamos el estado del formulario vacío
+    // Inicializamos el estado del formulario vacío basándonos en los PLACES reales
     const initialData: any = {};
-    mockPlaces.forEach(p => {
+    places.forEach(p => {
       initialData[p.id] = { tasks: {}, corrections: '', score: null, notes: '', damage: '', photos: [] };
     });
     setQcData(initialData);
@@ -87,10 +96,11 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
   const handleSaveQC = () => {
     if (!selectedHouse) return;
     
-    // Evaluamos si quedó alguna tarea sin contestar para determinar si es Pending o Finished
+    // Evaluamos si quedó alguna tarea sin contestar (solo evaluamos lugares que tienen tareas)
     let isPending = false;
-    mockPlaces.forEach(p => {
-      p.tasks.forEach(t => {
+    places.forEach(p => {
+      const placeTasks = tasks.filter(t => t.placeId === p.id);
+      placeTasks.forEach(t => {
         if (!qcData[p.id]?.tasks[t.id]) isPending = true;
       });
     });
@@ -101,7 +111,8 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
       date: new Date().toISOString().split('T')[0],
       address: selectedHouse.address,
       client: selectedHouse.client,
-      status: isPending ? 'Pending' : 'Finished'
+      status: isPending ? 'Pending' : 'Finished',
+      inspector: currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unknown'
     };
 
     setQcList([newRecord, ...qcList]);
@@ -109,7 +120,7 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
     handleCloseForm();
   };
 
-  // --- Funciones para manejar el estado replicando las de tu AppScript ---
+  // --- Funciones para manejar el estado ---
   const setTaskValue = (placeId: string, taskId: string, value: 'Yes' | 'No') => {
     setQcData(prev => ({
       ...prev, [placeId]: { ...prev[placeId], tasks: { ...prev[placeId].tasks, [taskId]: value } }
@@ -192,7 +203,10 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
                 <tr key={qc.id} style={{ transition: 'background-color 0.2s', borderBottom: '1px solid #f1f5f9' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                   <td style={s.td}>{formatDate(qc.date)}</td>
                   <td style={{...s.td, fontWeight: 600}}>{qc.client}</td>
-                  <td style={{...s.td, color: '#6b7280'}}>{qc.address}</td>
+                  <td style={{...s.td, color: '#6b7280'}}>
+                    <div>{qc.address}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Inspected by: {qc.inspector || 'Unknown'}</div>
+                  </td>
                   <td style={s.td}>
                     <span style={{ 
                       backgroundColor: qc.status === 'Finished' ? '#dcfce7' : '#fef3c7', 
@@ -217,19 +231,22 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
         </div>
       </div>
 
-      {/* --- EL MODAL PREMIUM TRADUCIDO DEL APPSCRIPT --- */}
+      {/* --- EL MODAL PREMIUM DINÁMICO --- */}
       {isFormModalOpen && selectedHouse && (
         <div style={s.overlay}>
           <div style={s.modalWide}>
             
-            {/* Header Estilo AppScript pero Moderno */}
+            {/* Header Actualizado */}
             <div style={s.headerQC}>
               <div>
                 <h1 style={{ margin: 0, fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <ClipboardCheck size={22}/> Quality Check Inspection
                 </h1>
-                <p style={{ margin: '5px 0 0', fontSize: '0.95rem', opacity: 0.9 }}>
-                  ID House: <strong style={{backgroundColor: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: '4px'}}>&lt;&lt; {selectedHouse.id} &gt;&gt;</strong>
+                <p style={{ margin: '8px 0 0', fontSize: '0.95rem', opacity: 0.9 }}>
+                  Property: <strong style={{backgroundColor: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: '4px'}}>{selectedHouse.client} - {selectedHouse.address}</strong>
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '0.85rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <User size={14} /> Inspector: {currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unknown User'}
                 </p>
               </div>
               <button style={s.closeBtn} onClick={handleCloseForm}><X size={24} /></button>
@@ -238,68 +255,84 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
             {/* Body desplazable */}
             <div style={{ padding: '20px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
               
-              {mockPlaces.map(place => {
-                const placeData = qcData[place.id] || { tasks: {} };
+              {isLoadingCatalogs ? (
+                <div style={{ color: '#6b7280', padding: '20px', textAlign: 'center', gridColumn: '1 / -1' }}>
+                  Loading Inspection Checklist...
+                </div>
+              ) : places.length === 0 ? (
+                <div style={{ color: '#ef4444', padding: '20px', textAlign: 'center', gridColumn: '1 / -1', backgroundColor: '#fef2f2', borderRadius: '8px' }}>
+                  Please go to Settings &gt; Places and configure your rooms and tasks first.
+                </div>
+              ) : (
+                places.map(place => {
+                  const placeData = qcData[place.id] || { tasks: {} };
+                  const placeTasks = tasks.filter(t => t.placeId === place.id);
 
-                return (
-                  <div key={place.id} style={s.cardQC}>
-                    <h2 style={s.cardTitle}>{place.name}</h2>
-                    
-                    <div style={{ marginBottom: '16px' }}>
-                      {place.tasks.map(task => (
-                        <div key={task.id} style={s.taskItem}>
-                          <span style={{ fontSize: '0.95rem', color: '#374151' }}>{task.name}</span>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button onClick={() => setTaskValue(place.id, task.id, 'Yes')} style={s.btnYes(placeData.tasks[task.id] === 'Yes')}>Yes</button>
-                            <button onClick={() => setTaskValue(place.id, task.id, 'No')} style={s.btnNo(placeData.tasks[task.id] === 'No')}>No</button>
+                  // Si un lugar no tiene tareas configuradas, podemos decidir no mostrarlo
+                  if (placeTasks.length === 0) return null;
+
+                  return (
+                    <div key={place.id} style={s.cardQC}>
+                      <h2 style={s.cardTitle}>{place.name}</h2>
+                      
+                      <div style={{ marginBottom: '16px' }}>
+                        {placeTasks.map(task => (
+                          <div key={task.id} style={s.taskItem}>
+                            <span style={{ fontSize: '0.95rem', color: '#374151' }}>{task.name}</span>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button onClick={() => setTaskValue(place.id, task.id, 'Yes')} style={s.btnYes(placeData.tasks[task.id] === 'Yes')}>Yes</button>
+                              <button onClick={() => setTaskValue(place.id, task.id, 'No')} style={s.btnNo(placeData.tasks[task.id] === 'No')}>No</button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={s.extraFields}>
-                      <label style={s.labelQC}>¿Correcciones del Manager?</label>
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
-                        <button onClick={() => setCorrectionValue(place.id, 'Yes')} style={s.btnYes(placeData.corrections === 'Yes')}>Yes</button>
-                        <button onClick={() => setCorrectionValue(place.id, 'No')} style={s.btnNo(placeData.corrections === 'No')}>No</button>
-                      </div>
-
-                      <label style={s.labelQC}>Score (1-3)</label>
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
-                        {[1, 2, 3].map(num => (
-                          <button key={num} onClick={() => setScoreValue(place.id, num)} style={s.btnScore(placeData.score === num)}>{num}</button>
                         ))}
                       </div>
-                      
-                      <div style={s.uploadBox}>
-                        <Camera size={24} color="#9ca3af"/>
-                        <span>Click to upload photos (Max 10)</span>
-                        <span style={{fontSize: '0.75rem', color: '#9ca3af'}}>*Mock integration*</span>
+
+                      <div style={s.extraFields}>
+                        <label style={s.labelQC}>¿Correcciones del Manager?</label>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+                          <button onClick={() => setCorrectionValue(place.id, 'Yes')} style={s.btnYes(placeData.corrections === 'Yes')}>Yes</button>
+                          <button onClick={() => setCorrectionValue(place.id, 'No')} style={s.btnNo(placeData.corrections === 'No')}>No</button>
+                        </div>
+
+                        <label style={s.labelQC}>Score (1-3)</label>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                          {[1, 2, 3].map(num => (
+                            <button key={num} onClick={() => setScoreValue(place.id, num)} style={s.btnScore(placeData.score === num)}>{num}</button>
+                          ))}
+                        </div>
+                        
+                        <div style={s.uploadBox}>
+                          <Camera size={24} color="#9ca3af"/>
+                          <span>Click to upload photos (Max 10)</span>
+                          <span style={{fontSize: '0.75rem', color: '#9ca3af'}}>*Integration pending*</span>
+                        </div>
+
+                        <label style={s.labelQC}>Notas</label>
+                        <textarea 
+                          style={{...s.textareaQC, marginBottom: '12px'}} 
+                          value={placeData.notes || ''} 
+                          onChange={(e) => handleTextChange(place.id, 'notes', e.target.value)}
+                        />
+
+                        <label style={s.labelQC}>Daños</label>
+                        <textarea 
+                          style={s.textareaQC} 
+                          value={placeData.damage || ''} 
+                          onChange={(e) => handleTextChange(place.id, 'damage', e.target.value)}
+                        />
                       </div>
-
-                      <label style={s.labelQC}>Notas</label>
-                      <textarea 
-                        style={{...s.textareaQC, marginBottom: '12px'}} 
-                        value={placeData.notes || ''} 
-                        onChange={(e) => handleTextChange(place.id, 'notes', e.target.value)}
-                      />
-
-                      <label style={s.labelQC}>Daños</label>
-                      <textarea 
-                        style={s.textareaQC} 
-                        value={placeData.damage || ''} 
-                        onChange={(e) => handleTextChange(place.id, 'damage', e.target.value)}
-                      />
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
 
             </div>
             
             {/* Pie con el Botón Verde de Guardado */}
             <div style={s.saveBar}>
-              <button style={s.btnSaveQC} onClick={handleSaveQC}>GUARDAR TODO</button>
+              <button style={s.btnSaveQC} onClick={handleSaveQC} disabled={isLoadingCatalogs || places.length === 0}>
+                GUARDAR TODO
+              </button>
             </div>
 
           </div>
