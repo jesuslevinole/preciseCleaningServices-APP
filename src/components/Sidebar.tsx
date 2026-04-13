@@ -1,6 +1,6 @@
 import { 
   Building2, Home, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen, Users, CalendarDays,
-  ShieldCheck, UserPlus, LogOut, DollarSign 
+  ShieldCheck, UserPlus, LogOut, DollarSign, ClipboardCheck 
 } from 'lucide-react';
 import { auth } from '../config/firebase';
 import { signOut } from 'firebase/auth';
@@ -15,33 +15,31 @@ interface SidebarProps {
   setActiveTab: (tab: TabOptions) => void;
   onSettingsClick: () => void;
   activeRole: Role | null;
-  isSuperAdmin: boolean; // Recibimos la llave maestra
+  isSuperAdmin: boolean; 
 }
 
 export default function Sidebar({ 
   isSidebarOpen, setIsSidebarOpen, activeTab, setActiveTab, onSettingsClick, activeRole, isSuperAdmin 
 }: SidebarProps) {
   
-  // Función universal para chequear permisos
   const canView = (moduleName: string) => {
-    if (isSuperAdmin) return true; // Llave maestra ve todo
+    if (isSuperAdmin) return true; 
     if (!activeRole) return false;
     
     const permission = activeRole.permissions?.find(p => p.module === moduleName);
     return permission ? permission.canView : false;
   };
 
-  // El acceso a Admin (Roles, Users, Settings, Payroll) está dictado por permisos específicos
   const canViewAdmin = isSuperAdmin || canView('Settings');
-  
-  // Por ahora, permitimos que Admin o personas con permiso de Settings vean Payroll. 
-  // (Si en el futuro agregas un módulo "Payroll" a los roles, puedes cambiar canViewAdmin por canView('Payroll'))
   const canViewPayroll = isSuperAdmin || canView('Settings'); 
+  
+  // Por ahora asociamos ver QC a ver Houses o ser Admin
+  const canViewQC = isSuperAdmin || canView('Houses'); 
 
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to log out?')) {
       await signOut(auth);
-      window.location.reload(); // Forzamos limpieza si era bypass
+      window.location.reload(); 
     }
   };
 
@@ -77,7 +75,14 @@ export default function Sidebar({
           </button>
         )}
 
-        {/* MÓDULO PAYROLL AÑADIDO AQUÍ */}
+        {/* MÓDULO QUALITY CHECK AÑADIDO AQUÍ */}
+        {canViewQC && (
+          <button className={`nav-item ${activeTab === 'qc_report' ? 'active' : ''}`} onClick={() => setActiveTab('qc_report')}>
+            <ClipboardCheck size={20} className="nav-icon" />
+            {isSidebarOpen && <span className="nav-text">Quality Check</span>}
+          </button>
+        )}
+
         {canViewPayroll && (
           <button className={`nav-item ${activeTab === 'payroll' ? 'active' : ''}`} onClick={() => setActiveTab('payroll')}>
             <DollarSign size={20} className="nav-icon" />

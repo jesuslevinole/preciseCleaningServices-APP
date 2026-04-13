@@ -4,8 +4,8 @@ import HousesView from './views/HousesView';
 import CustomersView from './views/CustomersView';
 import SettingsView from './views/SettingsView';
 import CalendarView from './views/CalendarView';
-import QualityCheckView from './views/QualityCheckView';
-import PayrollView from './views/PayrollView'; // <-- 1. IMPORTAMOS LA NUEVA VISTA
+import QualityCheckView from './views/QualityCheckView'; // YA ESTÁ IMPORTADO
+import PayrollView from './views/PayrollView'; 
 import LoginView from './views/auth/LoginView';
 import RolesView from './views/admin/RolesView';
 import UsersView from './views/admin/UsersView';
@@ -125,13 +125,13 @@ export default function App() {
         
         {activeTab === 'calendar' && <CalendarView properties={visibleProperties as any} onOpenMenu={() => setIsSidebarOpen(true)} />}
         
-        {/* 2. RENDERIZAMOS LA VISTA DE PAYROLL */}
         {activeTab === 'payroll' && <PayrollView onOpenMenu={() => setIsSidebarOpen(true)} />}
 
+        {/* AQUÍ ESTÁ EL QUALITY CHECK, YA LO QUITAMOS DEL MENSAJE DE UNDER CONSTRUCTION */}
         {activeTab === 'qc_report' && (
           <QualityCheckView 
-            properties={visibleProperties as any} 
             onOpenMenu={() => setIsSidebarOpen(true)} 
+            properties={visibleProperties as any}
             houseToInspect={houseToInspect as any}
             clearHouseToInspect={() => setHouseToInspect(null)}
           />
@@ -157,7 +157,7 @@ export default function App() {
         
         {activeTab === 'users' && <UsersView onOpenMenu={() => setIsSidebarOpen(true)} roles={roles} />}
 
-        {/* 3. QUITAMOS 'payroll' DE ESTA LISTA DE EN CONSTRUCCIÓN */}
+        {/* SOLAMENTE QUEDAN EN CONSTRUCCIÓN ESTOS 3 MÓDULOS */}
         {(activeTab === 'invoices' || activeTab === 'done' || activeTab === 'qc_route') && (
           <div className="fade-in" style={{ padding: '40px', textAlign: 'center', color: '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <h2 style={{ color: '#111827', fontSize: '1.5rem', margin: '0 0 8px 0' }}>Under Construction</h2>
