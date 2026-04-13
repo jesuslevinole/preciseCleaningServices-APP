@@ -4,7 +4,7 @@ import HousesView from './views/HousesView';
 import CustomersView from './views/CustomersView';
 import SettingsView from './views/SettingsView';
 import CalendarView from './views/CalendarView';
-import QualityCheckView from './views/QualityCheckView'; // YA ESTÁ IMPORTADO
+import QualityCheckView from './views/QualityCheckView'; 
 import PayrollView from './views/PayrollView'; 
 import LoginView from './views/auth/LoginView';
 import RolesView from './views/admin/RolesView';
@@ -94,6 +94,9 @@ export default function App() {
     setActiveTab('qc_report');
   };
 
+  // Función que intercala entre abrir y cerrar el menú
+  const toggleMenu = () => setIsSidebarOpen(!isSidebarOpen);
+
   if (!isAuthenticated) {
     return <LoginView onLoginSuccess={handleLoginSuccess} />;
   }
@@ -115,7 +118,7 @@ export default function App() {
           <HousesView 
             properties={visibleProperties as any} 
             setProperties={setProperties as any} 
-            onOpenMenu={() => setIsSidebarOpen(true)} 
+            onOpenMenu={toggleMenu} 
             onCheckHouse={handleCheckHouse} 
             currentUser={currentUser}
             activeRole={activeRole}
@@ -123,41 +126,40 @@ export default function App() {
           />
         )}
         
-        {activeTab === 'calendar' && <CalendarView properties={visibleProperties as any} onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {activeTab === 'calendar' && <CalendarView properties={visibleProperties as any} onOpenMenu={toggleMenu} />}
         
-        {activeTab === 'payroll' && <PayrollView onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {activeTab === 'payroll' && <PayrollView onOpenMenu={toggleMenu} />}
 
-        {/* AQUÍ ESTÁ EL QUALITY CHECK, YA LO QUITAMOS DEL MENSAJE DE UNDER CONSTRUCTION */}
         {activeTab === 'qc_report' && (
           <QualityCheckView 
-            onOpenMenu={() => setIsSidebarOpen(true)} 
+            onOpenMenu={toggleMenu} 
             properties={visibleProperties as any}
             houseToInspect={houseToInspect as any}
             clearHouseToInspect={() => setHouseToInspect(null)}
+            currentUser={currentUser}
           />
         )}
 
-        {activeTab === 'customers' && <CustomersView onOpenMenu={() => setIsSidebarOpen(true)} />}
+        {activeTab === 'customers' && <CustomersView onOpenMenu={toggleMenu} />}
         
         {activeTab === 'settings' && (
           <SettingsView 
             currentSettingView={currentSettingView}
             setCurrentSettingView={setCurrentSettingView}
-            onOpenMenu={() => setIsSidebarOpen(true)}
+            onOpenMenu={toggleMenu}
           />
         )}
 
         {activeTab === 'roles' && (
           <RolesView 
-            onOpenMenu={() => setIsSidebarOpen(true)} 
+            onOpenMenu={toggleMenu} 
             roles={roles} 
             setRoles={setRoles} 
           />
         )}
         
-        {activeTab === 'users' && <UsersView onOpenMenu={() => setIsSidebarOpen(true)} roles={roles} />}
+        {activeTab === 'users' && <UsersView onOpenMenu={toggleMenu} roles={roles} />}
 
-        {/* SOLAMENTE QUEDAN EN CONSTRUCCIÓN ESTOS 3 MÓDULOS */}
         {(activeTab === 'invoices' || activeTab === 'done' || activeTab === 'qc_route') && (
           <div className="fade-in" style={{ padding: '40px', textAlign: 'center', color: '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <h2 style={{ color: '#111827', fontSize: '1.5rem', margin: '0 0 8px 0' }}>Under Construction</h2>
