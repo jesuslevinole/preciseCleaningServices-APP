@@ -250,7 +250,6 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
     }
   };
 
-  // --- CORRECCIÓN DEL GUARDADO ---
   const handleSave = async () => {
     if (!formData.client) return alert("Client is required.");
     if (!formData.address) return alert("Address is required.");
@@ -259,7 +258,6 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
     try {
       if (selectedHouse && selectedHouse.id) {
         const { id, ...dataToUpdate } = formData; 
-        // USAMOS "as any" para que TS no bloquee por tipos literales
         await propertiesService.update(selectedHouse.id, dataToUpdate as any);
         setPropertiesList(propertiesList.map(p => p.id === selectedHouse.id ? { ...formData } : p));
       } else {
@@ -269,7 +267,6 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
           description: `${formData.client} - ${formData.rooms} rooms`,
           city: 'TBD', size: 'TBD'
         };
-        // USAMOS "as any" para que TS no bloquee
         const newId = await propertiesService.create(completeData as any);
         setPropertiesList([...propertiesList, { ...formData, id: newId, description: completeData.description, city: completeData.city, size: completeData.size }]);
       }
@@ -409,11 +406,17 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
         .calendar-event-month:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); filter: brightness(0.95); }
 
         /* Time Grid (Día / Semana) */
+        .week-scroll-container { display: flex; flex-direction: column; flex: 1; overflow-x: auto; overflow-y: hidden; }
+        .week-grid-inner { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+        .week-view-active { min-width: 750px; } /* Fuerza el scroll horizontal en móvil para la semana */
+        .day-view-active { min-width: 100%; }
+
         .time-grid-container { display: flex; flex: 1; overflow-y: auto; position: relative; }
         .time-axis { width: 60px; flex-shrink: 0; background: white; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; }
         .time-label { height: 60px; padding-right: 8px; text-align: right; font-size: 0.75rem; color: #64748b; border-bottom: 1px solid #f1f5f9; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: flex-end; padding-top: 4px;}
-        .day-columns-wrapper { display: flex; flex: 1; }
-        .day-column-time { flex: 1; border-right: 1px solid #e5e7eb; position: relative; min-width: 120px; }
+        
+        .day-columns-wrapper { display: flex; flex: 1; flex-direction: row; }
+        .day-column-time { flex: 1; border-right: 1px solid #e5e7eb; position: relative; min-width: 0; }
         .day-column-time:last-child { border-right: none; }
         .hour-grid-line { height: 60px; border-bottom: 1px solid #f1f5f9; box-sizing: border-box; width: 100%; }
         
@@ -425,21 +428,23 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
 
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
+        
         @media (max-width: 768px) {
+          .view-header-title-group { flex-direction: row-reverse; justify-content: space-between; width: 100%; }
           .grid-3-cols { grid-template-columns: 1fr; gap: 16px; }
-          .calendar-body-grid, .calendar-header-grid { display: flex; flex-direction: column; gap: 0; }
+          
+          /* SOLO APLICA AL MES EL APILAMIENTO VERTICAL */
+          .calendar-body-grid { display: flex; flex-direction: column; gap: 0; }
           .calendar-header-grid { display: none; }
           .calendar-day-cell { min-height: auto; border-bottom: 1px solid #e5e7eb; }
           .calendar-day-cell.empty { display: none; }
-          .day-columns-wrapper { flex-direction: column; }
-          .day-column-time { min-height: 500px; border-bottom: 2px solid #cbd5e1; }
         }
       `}</style>
 
       {/* HEADER */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={onOpenMenu} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }} className="mobile-menu-btn">
+        <div className="view-header-title-group">
+          <button onClick={onOpenMenu} className="hamburger-btn" aria-label="Open menu">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
           <div>
@@ -495,40 +500,43 @@ export default function CalendarView({ onOpenMenu, onCheckHouse }: CalendarViewP
 
           {/* === VISTA DE SEMANA / DÍA (Estilo Google Calendar) === */}
           {(viewMode === 'week' || viewMode === 'day') && (
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-              
-              {/* Header de la semana/día */}
-              <div className="calendar-header-grid" style={{ paddingLeft: '60px', display: 'flex' }}>
-                {(viewMode === 'week' ? weekDaysDates : [currentDate]).map((date, i) => (
-                  <div key={i} style={{ flex: 1, padding: '12px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>{weekDaysLabels[date.getDay()]}</div>
-                    <div style={{ fontSize: '1.2rem', color: '#1e293b', fontWeight: 800, marginTop: '2px' }}>{date.getDate()}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Grid Horario */}
-              <div className="time-grid-container">
-                {/* Eje Y de Horas */}
-                <div className="time-axis">
-                  {hoursOfDay.map(h => (
-                    <div key={`h-${h}`} className="time-label">
-                      {h > 12 ? `${h-12} PM` : h === 12 ? '12 PM' : `${h} AM`}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Columnas de Días */}
-                <div className="day-columns-wrapper">
+            <div className="week-scroll-container">
+              <div className={`week-grid-inner ${viewMode === 'week' ? 'week-view-active' : 'day-view-active'}`}>
+                
+                {/* Header de la semana/día */}
+                <div style={{ paddingLeft: '60px', display: 'flex', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f8fafc' }}>
                   {(viewMode === 'week' ? weekDaysDates : [currentDate]).map((date, i) => (
-                    <div key={`day-${i}`} className="day-column-time">
-                      {/* Líneas de fondo */}
-                      {hoursOfDay.map(h => <div key={`bg-${h}`} className="hour-grid-line"></div>)}
-                      {/* Eventos Posicionados */}
-                      {renderEventBlocks(date)}
+                    <div key={i} style={{ flex: 1, padding: '12px', textAlign: 'center', borderRight: '1px solid #e5e7eb' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>{weekDaysLabels[date.getDay()]}</div>
+                      <div style={{ fontSize: '1.2rem', color: '#1e293b', fontWeight: 800, marginTop: '2px' }}>{date.getDate()}</div>
                     </div>
                   ))}
                 </div>
+
+                {/* Grid Horario */}
+                <div className="time-grid-container">
+                  {/* Eje Y de Horas */}
+                  <div className="time-axis">
+                    {hoursOfDay.map(h => (
+                      <div key={`h-${h}`} className="time-label">
+                        {h > 12 ? `${h-12} PM` : h === 12 ? '12 PM' : `${h} AM`}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Columnas de Días */}
+                  <div className="day-columns-wrapper">
+                    {(viewMode === 'week' ? weekDaysDates : [currentDate]).map((date, i) => (
+                      <div key={`day-${i}`} className="day-column-time">
+                        {/* Líneas de fondo */}
+                        {hoursOfDay.map(h => <div key={`bg-${h}`} className="hour-grid-line"></div>)}
+                        {/* Eventos Posicionados */}
+                        {renderEventBlocks(date)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             </div>
           )}
