@@ -59,7 +59,6 @@ export default function QualityCheckView({ onOpenMenu, properties, houseToInspec
         setPlaces(sortedPlaces);
         setTasks(sortedTasks);
 
-        // CORRECCIÓN DE TIPADO AQUÍ: Le decimos a TypeScript que esto es un array de QCRecord
         const docsArray = (qcSnap as any).docs || [];
         const loadedQCs: QCRecord[] = docsArray.map((document: any) => ({ 
           id: document.id, 

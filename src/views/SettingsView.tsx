@@ -7,16 +7,14 @@ import {
 } from 'lucide-react';
 import type { SettingOption, CategoryExpense, Team, Responsable, Priority, Status, Tax, Place, Service, PaymentMethod, Task, Product, Business } from '../types';
 
-// IMPORTACIÓN DEL SERVICIO Y FIREBASE
 import { settingsService } from '../services/settingsService';
 import { db } from '../config/firebase';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 
-// AQUÍ ESTÁ EL NUEVO MENÚ CON "TEAM CATALOG"
 const settingsOptions: SettingOption[] = [
   { id: 'category', label: 'Category Expenses', icon: Tags },
   { id: 'team', label: 'Teams', icon: Users },
-  { id: 'team_catalog', label: 'Team Catalog', icon: Contact }, // <-- EL NUEVO CATÁLOGO
+  { id: 'team_catalog', label: 'Team Catalog', icon: Contact },
   { id: 'responsable', label: 'Responsable', icon: UserCheck },
   { id: 'priority', label: 'Priority', icon: Flag },
   { id: 'status', label: 'Status', icon: Activity },
@@ -106,7 +104,6 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
   const [places, setPlaces] = useState<Place[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   
-  // NUEVO ESTADO PARA EL CATÁLOGO DE EMPLEADOS
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [selectedTeamFilter, setSelectedTeamFilter] = useState('All');
   
@@ -123,7 +120,9 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
   const [formData, setFormData] = useState({ 
     order: '', name: '', business: '', color: '#3b82f6', percentage: 0, estimatedTime: '', placeId: '', price: '',
     placeTasks: [] as {id: string, name: string}[],
-    teamId: '' // Añadido para el Team Catalog
+    teamId: '',
+    showInDashboard: false, // NUEVO
+    dashboardOrder: '' // NUEVO
   });
   
   const [newTaskInput, setNewTaskInput] = useState(''); 
@@ -166,7 +165,6 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
         if (taskData.length) setTasks(taskData as Task[]);
         if (taxData.length) setTaxValue(taxData[0] as Tax);
 
-        // Cargar System Users para el catálogo de equipos
         const usersReq = await getDocs(collection(db, 'system_users')).catch(() => null);
         if (usersReq) {
           setSystemUsers(usersReq.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -213,11 +211,13 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
         color: item.color || '#3b82f6', percentage: item.percentage || 0, estimatedTime: item.estimatedTime || '',
         placeId: item.placeId || '', price: item.price || '',
         placeTasks: currentSettingView === 'place' ? tasks.filter(t => t.placeId === item.id).map(t => ({id: t.id, name: t.name})) : [],
-        teamId: item.teamId || ''
+        teamId: item.teamId || '',
+        showInDashboard: item.showInDashboard || false,
+        dashboardOrder: item.dashboardOrder || ''
       });
     } else {
       setSelectedItem(null);
-      setFormData({ order: '', name: '', business: '', color: '#3b82f6', percentage: 0, estimatedTime: '', placeId: '', price: '', placeTasks: [], teamId: '' });
+      setFormData({ order: '', name: '', business: '', color: '#3b82f6', percentage: 0, estimatedTime: '', placeId: '', price: '', placeTasks: [], teamId: '', showInDashboard: false, dashboardOrder: '' });
     }
     setNewTaskInput('');
     setIsDetailModalOpen(false); 
@@ -260,7 +260,6 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
   };
 
   const handleSave = async () => {
-    // LÓGICA ESPECIAL PARA GUARDAR TEAM ROSTER
     if (currentSettingView === 'team_catalog') {
       setIsSaving(true);
       try {
@@ -302,7 +301,11 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
       let dataToSave: any = { name: formData.name };
       if (['team','priority','status','service'].includes(currentSettingView)) dataToSave.business = formData.business;
       if (['team','responsable','priority','status'].includes(currentSettingView)) dataToSave.color = formData.color;
-      if (currentSettingView === 'status') dataToSave.order = formData.order;
+      if (currentSettingView === 'status') {
+        dataToSave.order = formData.order;
+        dataToSave.showInDashboard = formData.showInDashboard;
+        dataToSave.dashboardOrder = formData.dashboardOrder;
+      }
       if (currentSettingView === 'task') dataToSave.placeId = formData.placeId;
       if (currentSettingView === 'product') dataToSave.price = formData.price;
       if (currentSettingView === 'service') dataToSave.estimatedTime = formData.estimatedTime;
@@ -515,7 +518,6 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-              {/* FILTRO PARA EL TEAM CATALOG */}
               {currentSettingView === 'team_catalog' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>Filter:</span>
@@ -553,20 +555,34 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                         </>
                       ) : (
                         <>
-                          {currentSettingView === 'status' && <th style={thStyle}>Order</th>}
-                          {currentSettingView === 'task' && <th style={thStyle}>Place</th>}
-                          
-                          {currentSettingView === 'task' ? <th style={thStyle}>Task</th> : 
-                           currentSettingView === 'tax' ? <th style={thStyle}>Tax %</th> : 
-                           currentSettingView === 'business' ? <th style={thStyle}>Business</th> : 
-                           currentSettingView === 'payment' ? <th style={thStyle}>Payment Method</th> :
-                           <th style={thStyle}>Name</th>}
-                          
-                          {currentSettingView === 'product' && <th style={thStyle}>Price</th>}
-                          {currentSettingView === 'service' && <th style={thStyle}>Estimated time</th>}
-                          
-                          {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && <th style={thStyle}>Business</th>}
-                          {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && <th style={thStyle}>Color</th>}
+                          {currentSettingView === 'status' && (
+                            <>
+                              <th style={thStyle}>Order</th>
+                              <th style={thStyle}>Name</th>
+                              <th style={thStyle}>Business</th>
+                              <th style={{...thStyle, textAlign: 'center'}}>In Dash?</th>
+                              <th style={{...thStyle, textAlign: 'center'}}>Dash Order</th>
+                              <th style={thStyle}>Color</th>
+                            </>
+                          )}
+
+                          {currentSettingView !== 'status' && (
+                            <>
+                              {currentSettingView === 'task' && <th style={thStyle}>Place</th>}
+                              
+                              {currentSettingView === 'task' ? <th style={thStyle}>Task</th> : 
+                               currentSettingView === 'tax' ? <th style={thStyle}>Tax %</th> : 
+                               currentSettingView === 'business' ? <th style={thStyle}>Business</th> : 
+                               currentSettingView === 'payment' ? <th style={thStyle}>Payment Method</th> :
+                               <th style={thStyle}>Name</th>}
+                              
+                              {currentSettingView === 'product' && <th style={thStyle}>Price</th>}
+                              {currentSettingView === 'service' && <th style={thStyle}>Estimated time</th>}
+                              
+                              {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'service') && <th style={thStyle}>Business</th>}
+                              {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority') && <th style={thStyle}>Color</th>}
+                            </>
+                          )}
                         </>
                       )}
                       
@@ -574,7 +590,6 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                     </tr>
                   </thead>
                   <tbody>
-                    {/* TEAM CATALOG ROWS */}
                     {currentSettingView === 'team_catalog' && systemUsers
                       .filter(u => {
                         if (selectedTeamFilter === 'All') return true;
@@ -636,9 +651,18 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
                       </tr>
                     ))}
 
-                    {currentSettingView === 'status' && statuses.map((status) => (
+                    {currentSettingView === 'status' && statuses.map((status: any) => (
                       <tr key={status.id} onClick={() => handleOpenDetail(status)} style={{ cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                        <td data-label="Order" style={tdStyle}>{status.order}</td><td data-label="Name" style={{...tdStyle, fontWeight: 600}}>{status.name}</td><td data-label="Business" style={{...tdStyle, color: '#6b7280'}}>{status.business || '-'}</td><td data-label="Color" style={tdStyle}><span style={{ backgroundColor: status.color, display: 'inline-block', width: '16px', height: '16px', borderRadius: '50%' }}></span></td>
+                        <td data-label="Order" style={tdStyle}>{status.order}</td>
+                        <td data-label="Name" style={{...tdStyle, fontWeight: 600}}>{status.name}</td>
+                        <td data-label="Business" style={{...tdStyle, color: '#6b7280'}}>{status.business || '-'}</td>
+                        <td data-label="In Dash?" style={{...tdStyle, textAlign: 'center'}}>
+                          <span style={{ backgroundColor: status.showInDashboard ? '#dcfce7' : '#f1f5f9', color: status.showInDashboard ? '#166534' : '#64748b', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>
+                            {status.showInDashboard ? 'Yes' : 'No'}
+                          </span>
+                        </td>
+                        <td data-label="Dash Order" style={{...tdStyle, textAlign: 'center'}}>{status.showInDashboard ? status.dashboardOrder : '-'}</td>
+                        <td data-label="Color" style={tdStyle}><span style={{ backgroundColor: status.color, display: 'inline-block', width: '16px', height: '16px', borderRadius: '50%' }}></span></td>
                         <td data-label="Actions" style={{...tdStyle, textAlign: 'right'}}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}><button style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleOpenForm(status); }}><Edit2 size={16} /></button><button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex' }} onClick={(e) => { e.stopPropagation(); handleDeleteClick(status.id); }}><Trash2 size={16} /></button></div></td>
                       </tr>
                     ))}
@@ -750,10 +774,25 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
               ) : currentSettingView !== 'team_catalog' && (
                 <>
                   {currentSettingView === 'status' && (
-                    <div style={s.formGroup}>
-                      <label style={s.label}>Order <span style={{color: '#3b82f6'}}>*</span></label>
-                      <input type="number" autoFocus style={s.input} value={formData.order} onChange={(e) => setFormData({ ...formData, order: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
-                    </div>
+                    <>
+                      <div style={s.formGroup}>
+                        <label style={s.label}>Form Order (Dropdown) <span style={{color: '#3b82f6'}}>*</span></label>
+                        <input type="number" autoFocus style={s.input} value={formData.order} onChange={(e) => setFormData({ ...formData, order: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+                      </div>
+                      
+                      {/* NUEVOS CAMPOS PARA STATUS DASHBOARD */}
+                      <div style={{...s.formGroup, flexDirection: 'row', alignItems: 'center', marginTop: '8px', marginBottom: '8px'}}>
+                        <input type="checkbox" id="showDash" checked={formData.showInDashboard} onChange={(e) => setFormData({ ...formData, showInDashboard: e.target.checked })} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
+                        <label htmlFor="showDash" style={{...s.label, margin: 0, cursor: 'pointer'}}>Show as Tab in Dashboard?</label>
+                      </div>
+                      
+                      {formData.showInDashboard && (
+                        <div style={s.formGroup}>
+                          <label style={s.label}>Dashboard Tab Order <span style={{color: '#3b82f6'}}>*</span></label>
+                          <input type="number" style={s.input} value={formData.dashboardOrder} onChange={(e) => setFormData({ ...formData, dashboardOrder: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && handleSave()} />
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <div style={s.formGroup}>
@@ -896,7 +935,7 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
               ) : (
                 <>
                   {currentSettingView === 'status' && (
-                    <div style={s.detailItem}><span style={s.detailLabel}>Order</span><span style={s.detailValue}>{selectedItem.order}</span></div>
+                    <div style={s.detailItem}><span style={s.detailLabel}>Form Order</span><span style={s.detailValue}>{selectedItem.order}</span></div>
                   )}
                   {currentSettingView === 'task' && (
                     <div style={s.detailItem}><span style={s.detailLabel}>Place</span><span style={s.detailValue}>{places.find(p => p.id === selectedItem.placeId)?.name || 'Unknown'}</span></div>
@@ -919,6 +958,15 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
 
                   {(currentSettingView === 'team' || currentSettingView === 'priority' || currentSettingView === 'status' || currentSettingView === 'service') && (
                     <div style={s.detailItem}><span style={s.detailLabel}>Business</span><span style={s.detailValue}>{selectedItem.business || 'N/A'}</span></div>
+                  )}
+
+                  {currentSettingView === 'status' && (
+                    <>
+                      <div style={s.detailItem}><span style={s.detailLabel}>Show in Dashboard?</span><span style={s.detailValue}>{selectedItem.showInDashboard ? 'Yes' : 'No'}</span></div>
+                      {selectedItem.showInDashboard && (
+                         <div style={s.detailItem}><span style={s.detailLabel}>Dashboard Tab Order</span><span style={s.detailValue}>{selectedItem.dashboardOrder}</span></div>
+                      )}
+                    </>
                   )}
 
                   {(currentSettingView === 'team' || currentSettingView === 'responsable' || currentSettingView === 'priority' || currentSettingView === 'status') && (

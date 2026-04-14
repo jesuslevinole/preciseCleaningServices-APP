@@ -83,7 +83,14 @@ export interface SettingOption {
   icon: any; 
 }
 
-export interface Status { id: string; order?: string | number; name: string; business?: string; color: string; }
+export interface Status {
+  id: string;
+  name: string;
+  business?: string;
+  color: string;
+  order: number | string; // Orden en el que aparece en pantalla
+  showInDashboard?: boolean; // NUEVO: Checkbox para saber si se muestra en el inicio
+}
 export interface Team { id: string; name: string; business?: string; color: string; }
 export interface Priority { id: string; name: string; business?: string; color: string; }
 export interface Service { id: string; name: string; estimatedTime?: string; business?: string; color?: string; }

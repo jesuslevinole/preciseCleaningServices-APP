@@ -158,6 +158,8 @@ interface HousesViewProps {
 export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
   
   const [activeFilter, setActiveFilter] = useState('All');
+  const [invoiceFilter, setInvoiceFilter] = useState('All'); // NUEVO FILTRO PARA PENDING/PAID
+  
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
@@ -247,10 +249,26 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     return team.id === currentUser.teamId;
   });
 
-  const filteredProperties = activeFilter === 'All' ? propertiesWithScope : propertiesWithScope.filter(p => {
-    const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
-    return st?.name === activeFilter;
+  // APLICAMOS FILTRO DE DASHBOARD Y DE INVOICE (PENDING/PAID)
+  const filteredProperties = propertiesWithScope.filter(p => {
+    let passStatus = true;
+    if (activeFilter !== 'All') {
+      const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
+      passStatus = st?.name === activeFilter;
+    }
+    
+    let passInvoice = true;
+    if (invoiceFilter !== 'All') {
+      passInvoice = p.invoiceStatus === invoiceFilter;
+    }
+    
+    return passStatus && passInvoice;
   });
+
+  // TABS DEL DASHBOARD ORDENADOS
+  const dashboardTabs = statuses
+    .filter(st => (st as any).showInDashboard)
+    .sort((a, b) => Number((a as any).dashboardOrder || 0) - Number((b as any).dashboardOrder || 0));
 
   const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
     setIsSaving(true);
@@ -309,7 +327,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setFormData({ ...formData, assignedWorkers: newWorkersList });
   };
 
-  // --- LÓGICA DE PAYROLL ---
   const handleOpenPayrollForm = (houseId: string) => {
     if (!houseId) return alert("Must save the house first.");
     setPayrollForm({ propertyId: houseId, date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0 });
@@ -686,19 +703,33 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         {/* LEFT COLUMN: DAILY JOBS */}
         <div className="left-col" style={{ flex: '1 1 600px' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'visible' }}>
+            
             <div style={s.tableHeader}>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Daily Jobs</h2>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
-              <div className="dashboard-filters" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                <button onClick={() => setActiveFilter('All')} style={s.pillBtn(activeFilter === 'All')}>All</button>
-                {statuses.map(st => (
-                  <button key={st.id} onClick={() => setActiveFilter(st.name)} style={s.pillBtn(activeFilter === st.name)}>
-                    {st.name}
-                  </button>
-                ))}
+              {/* FILTROS DE DASHBOARD */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', width: '100%', justifyContent: 'space-between', marginTop: '12px' }}>
+                <div className="dashboard-filters" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', flex: 1 }}>
+                  <button onClick={() => setActiveFilter('All')} style={s.pillBtn(activeFilter === 'All')}>All</button>
+                  {dashboardTabs.map(st => (
+                    <button key={st.id} onClick={() => setActiveFilter(st.name)} style={s.pillBtn(activeFilter === st.name)}>
+                      {st.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>Invoice:</span>
+                  <select style={{...s.input, width: 'auto', padding: '6px 12px', minWidth: '120px', borderRadius: '20px', cursor: 'pointer', height: '34px'}} value={invoiceFilter} onChange={e => setInvoiceFilter(e.target.value)}>
+                    <option value="All">All Invoices</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Needs Invoice">Needs Invoice</option>
+                  </select>
+                </div>
               </div>
             </div>
 
