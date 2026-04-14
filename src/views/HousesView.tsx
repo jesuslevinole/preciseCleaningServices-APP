@@ -158,7 +158,7 @@ interface HousesViewProps {
 export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
   
   const [activeFilter, setActiveFilter] = useState('All');
-  const [houseFilter, setHouseFilter] = useState('All'); // NUEVO FILTRO PARA CASAS
+  const [houseFilter, setHouseFilter] = useState('All'); 
   
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -255,7 +255,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       .filter(p => {
         const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
         const isStatusInvoice = st?.name?.toLowerCase() === 'invoice' || p.statusId?.toLowerCase() === 'invoice';
-        return !isStatusInvoice; // Solo las que sean diferente a Invoice
+        return !isStatusInvoice; 
       })
       .map(p => `${p.client || 'Unknown'}|${p.address || 'Unknown'}`)
   )).map(str => {
@@ -649,6 +649,31 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         .hamburger-btn:hover {
           background-color: #f8fafc;
         }
+        
+        /* Contenedor de filtros mejorado */
+        .filters-section {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          align-items: center;
+          width: 100%;
+          justify-content: space-between;
+          margin-top: 16px;
+        }
+        .tabs-container {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding-bottom: 4px;
+          flex: 1;
+          min-width: 250px;
+        }
+        .property-select-container {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          white-space: nowrap;
+        }
 
         @media (max-width: 768px) {
           .view-header-title-group {
@@ -663,6 +688,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           .responsive-table td:last-child { border-bottom: none; padding-bottom: 0; }
           .responsive-table td::before { content: attr(data-label); font-weight: 700; color: #6b7280; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
           .mobile-client-cell { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+          
+          /* Apilamos los filtros en móvil */
+          .filters-section {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .property-select-container select {
+            flex: 1;
+            max-width: 100% !important;
+          }
         }
       `}</style>
 
@@ -725,9 +760,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
-              {/* FILTROS DE DASHBOARD Y CASA */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', width: '100%', justifyContent: 'space-between', marginTop: '12px' }}>
-                <div className="dashboard-filters" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', flex: 1 }}>
+              {/* FILTROS DE DASHBOARD Y CASA MEJORADOS */}
+              <div className="filters-section">
+                <div className="tabs-container">
                   <button onClick={() => setActiveFilter('All')} style={s.pillBtn(activeFilter === 'All')}>All</button>
                   {dashboardTabs.map(st => (
                     <button key={st.id} onClick={() => setActiveFilter(st.name)} style={s.pillBtn(activeFilter === st.name)}>
@@ -736,7 +771,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="property-select-container">
                   <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>Property:</span>
                   <select 
                     style={{...s.input, width: 'auto', padding: '6px 12px', minWidth: '160px', maxWidth: '250px', borderRadius: '20px', cursor: 'pointer', height: '34px'}} 
