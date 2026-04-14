@@ -1,74 +1,77 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardCheck, X, Camera, MapPin, CalendarDays, Activity, FileText, User 
+  ClipboardCheck, X, Camera, MapPin, CalendarDays, Activity, FileText, User, Edit2, Trash2 
 } from 'lucide-react';
 import type { Property, SystemUser, Place, Task } from '../types/index';
 import { settingsService } from '../services/settingsService';
+import { db } from '../config/firebase';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 
 interface QCRecord {
-  id: string;
+  id?: string;
   houseId: string;
   date: string;
   address: string;
   client: string;
   status: 'Finished' | 'Pending';
   inspector?: string;
+  qcData?: any; // Para guardar las respuestas de las tareas
 }
-
-// Simulamos que ya hay reportes creados previamente
-const mockPastQCs: QCRecord[] = [
-  { id: 'qc-1', houseId: '1', date: '2026-03-20', address: '1405 Fairbanks St, Copperas Cove', client: 'Janina A.', status: 'Finished', inspector: 'Jesus Molero' },
-  { id: 'qc-2', houseId: '3', date: '2026-03-22', address: '3402 S W S Young Dr, Killeen', client: 'Linnemann', status: 'Pending', inspector: 'Astrid Flores' }
-];
 
 interface QualityCheckViewProps {
   onOpenMenu: () => void;
-  properties: Property[]; // Lo mantenemos en la interfaz para que App.tsx no se queje
+  properties: Property[]; 
   houseToInspect: Property | null;
   clearHouseToInspect: () => void;
   currentUser?: SystemUser | null;
 }
 
-// Quitamos 'properties' de aquí adentro para eliminar la alerta de "never read"
-export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHouseToInspect, currentUser }: QualityCheckViewProps) {
-  const [qcList, setQcList] = useState<QCRecord[]>(mockPastQCs);
+export default function QualityCheckView({ onOpenMenu, properties, houseToInspect, clearHouseToInspect, currentUser }: QualityCheckViewProps) {
+  const [qcList, setQcList] = useState<QCRecord[]>([]);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
+  const [editingQcId, setEditingQcId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Finished'>('All');
 
   // Estados para los catálogos dinámicos
   const [places, setPlaces] = useState<Place[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Estructura de estado complejo
   const [qcData, setQcData] = useState<Record<string, any>>({});
 
-  // 1. CARGAMOS LOS PLACES Y TASKS DESDE FIREBASE
+  // 1. CARGAMOS LOS PLACES, TASKS Y LOS REPORTES DESDE FIREBASE
   useEffect(() => {
-    const fetchCatalogs = async () => {
+    const fetchAllData = async () => {
       setIsLoadingCatalogs(true);
       try {
-        const [placesData, tasksData] = await Promise.all([
+        const [placesData, tasksData, qcSnap] = await Promise.all([
           settingsService.getAll('settings_places').catch(() => []),
-          settingsService.getAll('settings_tasks').catch(() => [])
+          settingsService.getAll('settings_tasks').catch(() => []),
+          getDocs(collection(db, 'quality_checks')).catch(() => ({ docs: [] } as any))
         ]);
 
-        // 2. ORDENAMOS ALFABÉTICAMENTE
         const sortedPlaces = (placesData as Place[]).sort((a, b) => a.name.localeCompare(b.name));
         const sortedTasks = (tasksData as Task[]).sort((a, b) => a.name.localeCompare(b.name));
 
         setPlaces(sortedPlaces);
         setTasks(sortedTasks);
+
+        const loadedQCs = qcSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as QCRecord));
+        loadedQCs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Más recientes primero
+        setQcList(loadedQCs);
       } catch (error) {
-        console.error("Error loading QC catalogs:", error);
+        console.error("Error loading QC data:", error);
       } finally {
         setIsLoadingCatalogs(false);
       }
     };
-    fetchCatalogs();
+    fetchAllData();
   }, []);
 
-  // Efecto para abrir el modal si venimos de darle al botón "Check" en HousesView
+  // Efecto para abrir el modal desde el Dashboard o HousesView
   useEffect(() => {
     if (houseToInspect && !isLoadingCatalogs) {
       handleOpenForm(houseToInspect);
@@ -76,10 +79,12 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
     }
   }, [houseToInspect, isLoadingCatalogs]);
 
+  const filteredQcList = qcList.filter(qc => statusFilter === 'All' || qc.status === statusFilter);
+
   const handleOpenForm = (house: Property) => {
     setSelectedHouse(house);
+    setEditingQcId(null);
     
-    // Inicializamos el estado del formulario vacío basándonos en los PLACES reales
     const initialData: any = {};
     places.forEach(p => {
       initialData[p.id] = { tasks: {}, corrections: '', score: null, notes: '', damage: '', photos: [] };
@@ -88,15 +93,38 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
     setIsFormModalOpen(true);
   };
 
+  const handleEditQC = (qc: QCRecord) => {
+    const house = properties.find(p => p.id === qc.houseId) || null;
+    if (!house) {
+      alert("The property associated with this report could not be found.");
+      return;
+    }
+    setSelectedHouse(house);
+    setEditingQcId(qc.id as string);
+    
+    // Cargamos los datos previos o inicializamos vacíos si faltan campos
+    const loadedData: any = qc.qcData || {};
+    places.forEach(p => {
+      if (!loadedData[p.id]) {
+        loadedData[p.id] = { tasks: {}, corrections: '', score: null, notes: '', damage: '', photos: [] };
+      }
+    });
+    
+    setQcData(loadedData);
+    setIsFormModalOpen(true);
+  };
+
   const handleCloseForm = () => {
     setIsFormModalOpen(false);
     setSelectedHouse(null);
+    setEditingQcId(null);
   };
 
-  const handleSaveQC = () => {
+  const handleSaveQC = async () => {
     if (!selectedHouse) return;
+    setIsSaving(true);
     
-    // Evaluamos si quedó alguna tarea sin contestar (solo evaluamos lugares que tienen tareas)
+    // Evaluamos si quedó alguna tarea sin contestar
     let isPending = false;
     places.forEach(p => {
       const placeTasks = tasks.filter(t => t.placeId === p.id);
@@ -105,22 +133,47 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
       });
     });
 
-    const newRecord: QCRecord = {
-      id: `qc-${Date.now()}`,
+    const recordData = {
       houseId: selectedHouse.id,
-      date: new Date().toISOString().split('T')[0],
+      date: editingQcId ? (qcList.find(q => q.id === editingQcId)?.date || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
       address: selectedHouse.address,
       client: selectedHouse.client,
       status: isPending ? 'Pending' : 'Finished',
-      inspector: currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unknown'
+      inspector: currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unknown',
+      qcData: qcData
     };
 
-    setQcList([newRecord, ...qcList]);
-    alert("✅ Quality Check Saved Successfully!");
-    handleCloseForm();
+    try {
+      if (editingQcId) {
+        await updateDoc(doc(db, 'quality_checks', editingQcId), recordData);
+        setQcList(prev => prev.map(qc => qc.id === editingQcId ? { id: editingQcId, ...recordData } as QCRecord : qc));
+      } else {
+        const docRef = await addDoc(collection(db, 'quality_checks'), recordData);
+        setQcList([{ id: docRef.id, ...recordData } as QCRecord, ...qcList]);
+      }
+      alert("✅ Quality Check Saved Successfully!");
+      handleCloseForm();
+    } catch (error) {
+      console.error("Error saving Quality Check:", error);
+      alert("Error trying to save the record.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // --- Funciones para manejar el estado ---
+  const handleDeleteQC = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this Quality Check report? This cannot be undone.")) return;
+    
+    try {
+      await deleteDoc(doc(db, 'quality_checks', id));
+      setQcList(prev => prev.filter(qc => qc.id !== id));
+    } catch (error) {
+      console.error("Error deleting Quality Check:", error);
+      alert("Error trying to delete the record.");
+    }
+  };
+
+  // --- Funciones para manejar el estado del formulario ---
   const setTaskValue = (placeId: string, taskId: string, value: 'Yes' | 'No') => {
     setQcData(prev => ({
       ...prev, [placeId]: { ...prev[placeId], tasks: { ...prev[placeId].tasks, [taskId]: value } }
@@ -139,7 +192,6 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
     setQcData(prev => ({ ...prev, [placeId]: { ...prev[placeId], [field]: value } }));
   };
 
-  // Función para formatear fechas consistentemente
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
     const [year, month, day] = dateString.split('-');
@@ -166,24 +218,32 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
     textareaQC: { width: '100%', height: '60px', border: '1px solid #e1e4e8', borderRadius: '4px', padding: '8px', boxSizing: 'border-box' as const, outline: 'none', fontFamily: 'inherit' },
     uploadBox: { border: '2px dashed #bbb', borderRadius: '8px', padding: '15px', cursor: 'pointer', textAlign: 'center' as const, backgroundColor: '#fff', margin: '10px 0', color: '#555', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '8px' },
     saveBar: { padding: '15px', textAlign: 'center' as const, borderTop: '3px solid #22c55e', backgroundColor: 'white', borderRadius: '0 0 12px 12px', flexShrink: 0 },
-    btnSaveQC: { backgroundColor: '#22c55e', color: 'white', padding: '15px 60px', border: 'none', borderRadius: '30px', fontWeight: 'bold' as const, cursor: 'pointer', fontSize: '16px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }
+    btnSaveQC: { backgroundColor: '#22c55e', color: 'white', padding: '15px 60px', border: 'none', borderRadius: '30px', fontWeight: 'bold' as const, cursor: 'pointer', fontSize: '16px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', opacity: isSaving ? 0.7 : 1 },
+    pillBtn: (active: boolean) => ({ padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: active ? '#3b82f6' : '#f1f5f9', color: active ? 'white' : '#64748b', transition: 'all 0.2s' })
   };
 
   return (
     <div className="fade-in" style={{ padding: '20px' }}>
       
-      {/* CABECERA DE LA VISTA (TABLA) */}
+      {/* CABECERA Y FILTROS */}
       <header className="main-header" style={{ marginBottom: '24px' }}>
-        <div className="header-titles">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="mobile-menu-btn" onClick={onOpenMenu} aria-label="Abrir menú" style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-            </button>
+        <div className="view-header-title-group" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button className="hamburger-btn" onClick={onOpenMenu} aria-label="Open menu" style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </button>
+          <div>
             <h1 style={{ margin: 0, color: '#111827', fontSize: '2rem' }}>Quality Check Reports</h1>
+            <p style={{ marginTop: '4px', color: '#6b7280' }}>History and status of house inspections</p>
           </div>
-          <p style={{ marginTop: '4px', color: '#6b7280' }}>History and status of house inspections</p>
         </div>
       </header>
+
+      {/* FILTRO DE ESTATUS */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        <button onClick={() => setStatusFilter('All')} style={s.pillBtn(statusFilter === 'All')}>All</button>
+        <button onClick={() => setStatusFilter('Pending')} style={s.pillBtn(statusFilter === 'Pending')}>Pending</button>
+        <button onClick={() => setStatusFilter('Finished')} style={s.pillBtn(statusFilter === 'Finished')}>Finished</button>
+      </div>
 
       {/* TABLA BLINDADA CON LOS REPORTES */}
       <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', width: '100%', overflow: 'hidden' }}>
@@ -191,40 +251,44 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
             <thead>
               <tr>
+                <th style={{...s.th, width: '100px'}}>Actions</th>
                 <th style={{...s.th, width: '120px'}}><CalendarDays size={14} style={{display: 'inline', marginRight: '6px', verticalAlign: 'middle'}}/> Date</th>
                 <th style={s.th}><User size={14} style={{display: 'inline', marginRight: '6px', verticalAlign: 'middle'}}/> Client</th>
                 <th style={s.th}><MapPin size={14} style={{display: 'inline', marginRight: '6px', verticalAlign: 'middle'}}/> Address</th>
-                <th style={s.th}><Activity size={14} style={{display: 'inline', marginRight: '6px', verticalAlign: 'middle'}}/> Status</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>Actions</th>
+                <th style={{...s.th, textAlign: 'right'}}><Activity size={14} style={{display: 'inline', marginRight: '6px', verticalAlign: 'middle'}}/> Status</th>
               </tr>
             </thead>
             <tbody>
-              {qcList.map((qc) => (
-                <tr key={qc.id} style={{ transition: 'background-color 0.2s', borderBottom: '1px solid #f1f5f9' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                  <td style={s.td}>{formatDate(qc.date)}</td>
-                  <td style={{...s.td, fontWeight: 600}}>{qc.client}</td>
-                  <td style={{...s.td, color: '#6b7280'}}>
-                    <div>{qc.address}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Inspected by: {qc.inspector || 'Unknown'}</div>
-                  </td>
-                  <td style={s.td}>
-                    <span style={{ 
-                      backgroundColor: qc.status === 'Finished' ? '#dcfce7' : '#fef3c7', 
-                      color: qc.status === 'Finished' ? '#166534' : '#b45309', 
-                      padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600 
-                    }}>
-                      {qc.status}
-                    </span>
-                  </td>
-                  <td style={{ ...s.td, textAlign: 'right' }}>
-                    <button style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 500, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <FileText size={16}/> View Report
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {qcList.length === 0 && (
+              {isLoadingCatalogs ? (
+                <tr><td colSpan={5} style={{ ...s.td, textAlign: 'center', color: '#6b7280', fontStyle: 'italic', padding: '30px' }}>Loading records from database...</td></tr>
+              ) : filteredQcList.length === 0 ? (
                 <tr><td colSpan={5} style={{ ...s.td, textAlign: 'center', color: '#6b7280', fontStyle: 'italic', padding: '30px' }}>No Quality Checks found.</td></tr>
+              ) : (
+                filteredQcList.map((qc) => (
+                  <tr key={qc.id} style={{ transition: 'background-color 0.2s', borderBottom: '1px solid #f1f5f9' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                    <td style={s.td}>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => handleEditQC(qc)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px' }}><Edit2 size={16} /></button>
+                        <button onClick={() => handleDeleteQC(qc.id as string)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}><Trash2 size={16} /></button>
+                      </div>
+                    </td>
+                    <td style={s.td}>{formatDate(qc.date)}</td>
+                    <td style={{...s.td, fontWeight: 600}}>{qc.client}</td>
+                    <td style={{...s.td, color: '#6b7280'}}>
+                      <div>{qc.address}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Inspected by: {qc.inspector || 'Unknown'}</div>
+                    </td>
+                    <td style={{...s.td, textAlign: 'right'}}>
+                      <span style={{ 
+                        backgroundColor: qc.status === 'Finished' ? '#dcfce7' : '#fef3c7', 
+                        color: qc.status === 'Finished' ? '#166534' : '#b45309', 
+                        padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600 
+                      }}>
+                        {qc.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -268,7 +332,6 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
                   const placeData = qcData[place.id] || { tasks: {} };
                   const placeTasks = tasks.filter(t => t.placeId === place.id);
 
-                  // Si un lugar no tiene tareas configuradas, podemos decidir no mostrarlo
                   if (placeTasks.length === 0) return null;
 
                   return (
@@ -330,8 +393,8 @@ export default function QualityCheckView({ onOpenMenu, houseToInspect, clearHous
             
             {/* Pie con el Botón Verde de Guardado */}
             <div style={s.saveBar}>
-              <button style={s.btnSaveQC} onClick={handleSaveQC} disabled={isLoadingCatalogs || places.length === 0}>
-                GUARDAR TODO
+              <button style={s.btnSaveQC} onClick={handleSaveQC} disabled={isLoadingCatalogs || places.length === 0 || isSaving}>
+                {isSaving ? 'GUARDANDO...' : 'GUARDAR TODO'}
               </button>
             </div>
 
