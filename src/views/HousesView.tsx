@@ -158,7 +158,7 @@ interface HousesViewProps {
 export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
   
   const [activeFilter, setActiveFilter] = useState('All');
-  const [invoiceFilter, setInvoiceFilter] = useState('All'); // NUEVO FILTRO PARA PENDING/PAID
+  const [houseFilter, setHouseFilter] = useState('All'); // NUEVO FILTRO PARA CASAS
   
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -249,7 +249,21 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     return team.id === currentUser.teamId;
   });
 
-  // APLICAMOS FILTRO DE DASHBOARD Y DE INVOICE (PENDING/PAID)
+  // EXTRAER LAS CASAS ÚNICAS OMITIENDO LAS QUE TIENEN ESTATUS "INVOICE"
+  const uniqueHouses = Array.from(new Set(
+    propertiesWithScope
+      .filter(p => {
+        const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
+        const isStatusInvoice = st?.name?.toLowerCase() === 'invoice' || p.statusId?.toLowerCase() === 'invoice';
+        return !isStatusInvoice; // Solo las que sean diferente a Invoice
+      })
+      .map(p => `${p.client || 'Unknown'}|${p.address || 'Unknown'}`)
+  )).map(str => {
+    const [client, address] = str.split('|');
+    return { client, address };
+  }).sort((a, b) => a.client.localeCompare(b.client));
+
+  // APLICAMOS FILTRO DE DASHBOARD Y DE PROPIEDAD
   const filteredProperties = propertiesWithScope.filter(p => {
     let passStatus = true;
     if (activeFilter !== 'All') {
@@ -257,12 +271,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       passStatus = st?.name === activeFilter;
     }
     
-    let passInvoice = true;
-    if (invoiceFilter !== 'All') {
-      passInvoice = p.invoiceStatus === invoiceFilter;
+    let passHouse = true;
+    if (houseFilter !== 'All') {
+      passHouse = `${p.client || 'Unknown'}|${p.address || 'Unknown'}` === houseFilter;
     }
     
-    return passStatus && passInvoice;
+    return passStatus && passHouse;
   });
 
   // TABS DEL DASHBOARD ORDENADOS
@@ -327,6 +341,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setFormData({ ...formData, assignedWorkers: newWorkersList });
   };
 
+  // --- LÓGICA DE PAYROLL ---
   const handleOpenPayrollForm = (houseId: string) => {
     if (!houseId) return alert("Must save the house first.");
     setPayrollForm({ propertyId: houseId, date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0 });
@@ -710,7 +725,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
-              {/* FILTROS DE DASHBOARD */}
+              {/* FILTROS DE DASHBOARD Y CASA */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', width: '100%', justifyContent: 'space-between', marginTop: '12px' }}>
                 <div className="dashboard-filters" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', flex: 1 }}>
                   <button onClick={() => setActiveFilter('All')} style={s.pillBtn(activeFilter === 'All')}>All</button>
@@ -722,12 +737,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>Invoice:</span>
-                  <select style={{...s.input, width: 'auto', padding: '6px 12px', minWidth: '120px', borderRadius: '20px', cursor: 'pointer', height: '34px'}} value={invoiceFilter} onChange={e => setInvoiceFilter(e.target.value)}>
-                    <option value="All">All Invoices</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Paid">Paid</option>
-                    <option value="Needs Invoice">Needs Invoice</option>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>Property:</span>
+                  <select 
+                    style={{...s.input, width: 'auto', padding: '6px 12px', minWidth: '160px', maxWidth: '250px', borderRadius: '20px', cursor: 'pointer', height: '34px'}} 
+                    value={houseFilter} 
+                    onChange={e => setHouseFilter(e.target.value)}
+                  >
+                    <option value="All">All Properties</option>
+                    {uniqueHouses.map((h, idx) => (
+                      <option key={idx} value={`${h.client}|${h.address}`}>{h.client} - {h.address}</option>
+                    ))}
                   </select>
                 </div>
               </div>
