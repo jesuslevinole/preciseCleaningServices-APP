@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardCheck, X, Camera, MapPin, CalendarDays, Activity, FileText, User, Edit2, Trash2 
+  ClipboardCheck, X, Camera, MapPin, CalendarDays, Activity, User, Edit2, Trash2 
 } from 'lucide-react';
 import type { Property, SystemUser, Place, Task } from '../types/index';
 import { settingsService } from '../services/settingsService';
@@ -50,7 +50,7 @@ export default function QualityCheckView({ onOpenMenu, properties, houseToInspec
         const [placesData, tasksData, qcSnap] = await Promise.all([
           settingsService.getAll('settings_places').catch(() => []),
           settingsService.getAll('settings_tasks').catch(() => []),
-          getDocs(collection(db, 'quality_checks')).catch(() => ({ docs: [] } as any))
+          getDocs(collection(db, 'quality_checks')).catch(() => ({ docs: [] }))
         ]);
 
         const sortedPlaces = (placesData as Place[]).sort((a, b) => a.name.localeCompare(b.name));
@@ -59,7 +59,13 @@ export default function QualityCheckView({ onOpenMenu, properties, houseToInspec
         setPlaces(sortedPlaces);
         setTasks(sortedTasks);
 
-        const loadedQCs = qcSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as QCRecord));
+        // CORRECCIÓN DE TIPADO AQUÍ: Le decimos a TypeScript que esto es un array de QCRecord
+        const docsArray = (qcSnap as any).docs || [];
+        const loadedQCs: QCRecord[] = docsArray.map((document: any) => ({ 
+          id: document.id, 
+          ...document.data() 
+        } as QCRecord));
+
         loadedQCs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Más recientes primero
         setQcList(loadedQCs);
       } catch (error) {
