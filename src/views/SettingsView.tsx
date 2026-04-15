@@ -5,7 +5,7 @@ import {
   MapPin, Wrench, CreditCard, ClipboardList, Package, Building, Plus,
   Edit2, Trash2, X, ChevronDown, Contact
 } from 'lucide-react';
-import type { SettingOption, CategoryExpense, Team, Responsable, Priority, Status, Tax, Place, Service, PaymentMethod, Task, Product, Business } from '../types';
+import type { SettingOption, CategoryExpense, Team, Responsable, Priority, Status, Tax, Place, Service, PaymentMethod, Task, Product, Business } from '../types/index';
 
 import { settingsService } from '../services/settingsService';
 import { db } from '../config/firebase';
@@ -121,8 +121,8 @@ export default function SettingsView({ currentSettingView, setCurrentSettingView
     order: '', name: '', business: '', color: '#3b82f6', percentage: 0, estimatedTime: '', placeId: '', price: '',
     placeTasks: [] as {id: string, name: string}[],
     teamId: '',
-    showInDashboard: false, // NUEVO
-    dashboardOrder: '' // NUEVO
+    showInDashboard: false, 
+    dashboardOrder: '' 
   });
   
   const [newTaskInput, setNewTaskInput] = useState(''); 

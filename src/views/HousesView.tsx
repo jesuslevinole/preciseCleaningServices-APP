@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  MapPin, Edit2, Trash2, Clock, ChevronDown, Filter, Menu, CheckSquare, Eye,
+  MapPin, Edit2, Trash2, Clock, ChevronDown, Filter, Menu,
   Search, Plus, Briefcase, ShieldCheck, AlertTriangle, Users
 } from 'lucide-react';
 
@@ -99,7 +99,8 @@ interface HousesViewProps {
   isSuperAdmin?: boolean;
 }
 
-export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
+// Nota: Hemos removido 'onCheckHouse' del destructuring para evitar la alerta TS(6133) ya que quitamos el botón que la llamaba.
+export default function HousesView({ onOpenMenu, properties, setProperties, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
   
   const [activeFilter, setActiveFilter] = useState('All');
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
@@ -343,6 +344,15 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       <style>{`
         .modal-overlay-centered { position: fixed; inset: 0; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px; box-sizing: border-box; }
         .modal-70 { background-color: #ffffff; width: 100%; max-width: 1000px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); display: flex; flex-direction: column; max-height: 90vh; overflow: hidden; }
+        
+        /* Clase para ocultar el scrollbar manteniendo la funcionalidad */
+        .hide-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none; /* Chrome, Safari and Opera */
+        }
       `}</style>
       
       {/* HEADER PRINCIPAL */}
@@ -447,8 +457,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
-            {/* TABLA DE TRABAJOS */}
-            <div style={{ overflowX: 'auto' }}>
+            {/* TABLA DE TRABAJOS (Añadido el hover y el click en la fila completa) */}
+            <div className="hide-scrollbar" style={{ overflowX: 'auto', width: '100%' }}>
               {isLoading ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>Cargando propiedades...</div>
               ) : filteredProperties.length === 0 ? (
@@ -467,13 +477,17 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </thead>
                   <tbody>
                     {filteredProperties.map((house) => (
-                      <tr key={house.id} style={{ transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                      <tr 
+                        key={house.id} 
+                        onClick={() => handleOpenDetail(house)}
+                        style={{ transition: 'background-color 0.2s', cursor: 'pointer' }} 
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} 
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
                         <td style={s.td}>
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => onCheckHouse(house)} style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: '4px' }} title="Check House"><CheckSquare size={16} /></button>
-                            <button onClick={() => handleOpenDetail(house)} style={{ background: 'none', border: 'none', color: '#8b5cf6', cursor: 'pointer', padding: '4px' }} title="View Details"><Eye size={16} /></button>
-                            <button onClick={() => handleOpenForm(house)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px' }} title="Edit"><Edit2 size={16} /></button>
-                            <button onClick={() => { setSelectedHouse(house); handleDelete(); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Delete"><Trash2 size={16} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleOpenForm(house); }} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px' }} title="Edit"><Edit2 size={16} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setSelectedHouse(house); handleDelete(); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Delete"><Trash2 size={16} /></button>
                           </div>
                         </td>
                         <td style={s.td}>
@@ -489,7 +503,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                         </td>
                         <td style={s.td}>{getRelationName(services, house.serviceId, 'Services 1')}</td>
                         <td style={s.td}>{getRelationName(teams, house.teamId, 'Team 1')}</td>
-                        <td style={s.td}>
+                        <td style={s.td} onClick={(e) => e.stopPropagation()}>
                           <StatusPillSelector currentStatusId={house.statusId} statuses={statuses} onChange={(newStatus) => handleQuickStatusChange(house.id, newStatus)} disabled={isSaving} />
                         </td>
                       </tr>
