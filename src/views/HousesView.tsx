@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  MapPin, Edit2, Trash2, Clock, ChevronDown, Filter, Menu,
+  MapPin, Edit2, Trash2, Clock, ChevronDown, Filter, Menu, CheckSquare, Eye,
   Search, Plus, Briefcase, ShieldCheck, AlertTriangle, Users
 } from 'lucide-react';
 
@@ -99,8 +99,7 @@ interface HousesViewProps {
   isSuperAdmin?: boolean;
 }
 
-// Nota: Hemos removido 'onCheckHouse' del destructuring para evitar la alerta TS(6133) ya que quitamos el botón que la llamaba.
-export default function HousesView({ onOpenMenu, properties, setProperties, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
+export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
   
   const [activeFilter, setActiveFilter] = useState('All');
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
@@ -457,7 +456,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, curr
               </div>
             </div>
 
-            {/* TABLA DE TRABAJOS (Añadido el hover y el click en la fila completa) */}
+            {/* TABLA DE TRABAJOS (Con todos los botones de acciones restaurados) */}
             <div className="hide-scrollbar" style={{ overflowX: 'auto', width: '100%' }}>
               {isLoading ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>Cargando propiedades...</div>
@@ -486,6 +485,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, curr
                       >
                         <td style={s.td}>
                           <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={(e) => { e.stopPropagation(); onCheckHouse(house); }} style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: '4px' }} title="Check House"><CheckSquare size={16} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleOpenDetail(house); }} style={{ background: 'none', border: 'none', color: '#8b5cf6', cursor: 'pointer', padding: '4px' }} title="View Details"><Eye size={16} /></button>
                             <button onClick={(e) => { e.stopPropagation(); handleOpenForm(house); }} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px' }} title="Edit"><Edit2 size={16} /></button>
                             <button onClick={(e) => { e.stopPropagation(); setSelectedHouse(house); handleDelete(); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Delete"><Trash2 size={16} /></button>
                           </div>
