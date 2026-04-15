@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
-  MapPin, Edit2, Trash2, Clock, Home, ChevronDown, Filter, Menu, CheckSquare, Eye
+  MapPin, Edit2, Trash2, Clock, ChevronDown, Filter, Menu, CheckSquare, Eye,
+  Search, Plus, Briefcase, ShieldCheck, AlertTriangle, Users
 } from 'lucide-react';
 
 import type { Property, Status, Team, Priority, Service, Customer, SystemUser, Role, PayrollRecord } from '../types/index';
@@ -17,54 +18,6 @@ const collectionMap: Record<string, string> = {
   priority: 'settings_priorities',
   status: 'settings_statuses',
   service: 'settings_services',
-};
-
-// --- CUSTOM SELECTORS ---
-const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const safeValue = String(value || '').toLowerCase().trim();
-  const selected = options.find((o: any) => 
-    String(o.id).toLowerCase().trim() === safeValue || 
-    String(o.name).toLowerCase().trim() === safeValue
-  );
-
-  return (
-    <div tabIndex={0} onBlur={() => setTimeout(() => setIsOpen(false), 200)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
-      <div 
-        onClick={() => setIsOpen(!isOpen)}
-        style={{ backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', position: 'relative' }}
-      >
-        <Icon size={16} style={{ position: 'absolute', left: '14px', color: '#6b7280' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {selected?.color && <span style={{ backgroundColor: selected.color, width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-          <span style={{ color: selected ? '#111827' : '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>
-            {selected ? selected.name : placeholder}
-          </span>
-        </div>
-        <ChevronDown size={16} color="#9ca3af" style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />
-      </div>
-
-      {isOpen && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, width: '100%', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 1000, maxHeight: '220px', overflowY: 'auto', marginTop: '4px' }}>
-          <div style={{ padding: '12px 14px', cursor: 'pointer', color: '#9ca3af', borderBottom: '1px solid #f3f4f6' }} onMouseDown={(e) => { e.preventDefault(); onChange(''); setIsOpen(false); }}>
-            None / Unassigned
-          </div>
-          {options.map((o: any) => (
-            <div 
-              key={o.id} 
-              style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', borderBottom: '1px solid #f9fafb', backgroundColor: value === o.id ? '#f1f5f9' : 'transparent' }}
-              onClick={() => { onChange(o[returnKey] || o.id); setIsOpen(false); }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = value === o.id ? '#f1f5f9' : 'transparent')}
-            >
-              {o.color && <span style={{ backgroundColor: o.color, display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', flexShrink: 0 }}></span>}
-              <span style={{ color: '#111827', fontWeight: 500 }}>{o.name}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 };
 
 // --- INLINE STATUS PILL SELECTOR ---
@@ -149,7 +102,6 @@ interface HousesViewProps {
 export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
   
   const [activeFilter, setActiveFilter] = useState('All');
-  const [houseFilter, setHouseFilter] = useState('All'); 
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -229,33 +181,26 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     return isAssigned || isSameTeam;
   });
 
-  const uniqueHouses = Array.from(new Set(
-    propertiesWithScope
-      .filter(p => {
-        const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
-        const isStatusInvoice = st?.name?.toLowerCase() === 'invoice' || p.statusId?.toLowerCase() === 'invoice';
-        return !isStatusInvoice; 
-      })
-      .map(p => `${p.client || 'Unknown'}|${p.address || 'Unknown'}`)
-  )).map(str => {
-    const [client, address] = str.split('|');
-    return { client, address };
-  }).sort((a, b) => a.client.localeCompare(b.client));
-
   const filteredProperties = propertiesWithScope.filter(p => {
-    let passStatus = true;
     if (activeFilter !== 'All') {
       const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
-      passStatus = st?.name === activeFilter;
+      return st?.name === activeFilter;
     }
-    
-    let passHouse = true;
-    if (houseFilter !== 'All') {
-      passHouse = `${p.client || 'Unknown'}|${p.address || 'Unknown'}` === houseFilter;
-    }
-
-    return passStatus && passHouse;
+    return true;
   });
+
+  // Funciones auxiliares para KPIs
+  const getStatusCount = (statusName: string) => propertiesWithScope.filter(p => {
+    const st = statuses.find(s => s.id === p.statusId);
+    return st?.name === statusName || p.statusId === statusName;
+  }).length;
+
+  const kpis = [
+    { title: 'Needs to be Schedule', count: getStatusCount('Needs to be Schedule'), icon: Briefcase, color: '#3b82f6' },
+    { title: 'In Progress', count: getStatusCount('In Progress'), icon: Clock, color: '#3b82f6' },
+    { title: 'Quality Check', count: getStatusCount('Quality Check'), icon: ShieldCheck, color: '#eab308' },
+    { title: 'Recall', count: getStatusCount('Recall'), icon: AlertTriangle, color: '#ef4444' },
+  ];
 
   const handleQuickStatusChange = async (propertyId: string, newStatusId: string) => {
     setIsSaving(true);
@@ -384,6 +329,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const s = {
     th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
     td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
+    dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' } as React.CSSProperties,
+    kpiCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' },
+    kpiIconBox: (color: string) => ({ backgroundColor: `${color}15`, color: color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
   };
 
   const today = new Date();
@@ -397,141 +345,187 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         .modal-70 { background-color: #ffffff; width: 100%; max-width: 1000px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); display: flex; flex-direction: column; max-height: 90vh; overflow: hidden; }
       `}</style>
       
-      {/* HEADER DE LA SECCIÓN */}
-      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button 
-          onClick={onOpenMenu} 
-          style={{ background: 'white', border: '1px solid #e5e7eb', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-        >
-          <Menu size={20} color="#111827" />
-        </button>
-        <div>
-          <h2 style={{ margin: 0, color: '#111827' }}>Daily Jobs</h2>
-          <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: '0.9rem' }}>{dateCapitalized}</p>
+      {/* HEADER PRINCIPAL */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button onClick={onOpenMenu} style={{ background: 'white', border: '1px solid #e5e7eb', padding: '10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            <Menu size={20} color="#111827" />
+          </button>
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>Dashboard</h1>
+            <p style={{ color: '#6b7280', margin: '4px 0 0', fontSize: '0.9rem' }}>General operations overview</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <Search size={18} style={{ position: 'absolute', left: '14px', color: '#6b7280' }} />
+            <input type="text" placeholder="Search job..." style={{ backgroundColor: '#ffffff', padding: '10px 14px 10px 40px', border: '1px solid #e5e7eb', borderRadius: '20px', fontSize: '0.95rem', color: '#111827', width: '250px', outline: 'none' }} />
+          </div>
+          <button onClick={() => handleOpenForm()} style={{ backgroundColor: '#111827', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Plus size={18} /> New Job
+          </button>
         </div>
       </div>
 
-      <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-        
-        {/* === NUEVA SECCIÓN DE FILTROS === */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  backgroundColor: activeFilter !== 'All' ? '#10b981' : 'white',
-                  color: activeFilter !== 'All' ? 'white' : '#111827',
-                  border: `1px solid ${activeFilter !== 'All' ? '#10b981' : '#e5e7eb'}`,
-                  padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, 
-                  cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                }}
-              >
-                <Filter size={16} />
-                {activeFilter === 'All' ? 'All Statuses' : activeFilter}
-                <ChevronDown size={16} style={{ transform: isFilterMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-              </button>
+      {/* TARJETAS SUPERIORES (KPIs) */}
+      <div style={s.dashGrid}>
+        {kpis.map((kpi, i) => (
+          <div key={i} style={s.kpiCard}>
+            <div style={s.kpiIconBox(kpi.color)}>
+              <kpi.icon size={24} />
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>{kpi.title}</p>
+              <h3 style={{ margin: '4px 0 0', fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>{kpi.count}</h3>
+            </div>
+          </div>
+        ))}
+      </div>
 
-              {isFilterMenuOpen && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, marginTop: '8px',
-                  backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px',
-                  boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 50, minWidth: '220px', overflow: 'hidden'
-                }}>
-                  <div
-                    onClick={() => { setActiveFilter('All'); setIsFilterMenuOpen(false); }}
-                    style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem', fontWeight: activeFilter === 'All' ? 700 : 500, backgroundColor: activeFilter === 'All' ? '#f8fafc' : 'white', color: '#111827' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = activeFilter === 'All' ? '#f8fafc' : 'white'}
-                  >
-                    All Statuses
-                  </div>
-                  
-                  {statuses
-                    .filter(st => st.name.toLowerCase() !== 'invoice' && st.id.toLowerCase() !== 'invoice')
-                    .map(st => (
-                      <div
-                        key={st.id}
-                        onClick={() => { setActiveFilter(st.name); setIsFilterMenuOpen(false); }}
-                        style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', fontWeight: activeFilter === st.name ? 700 : 500, backgroundColor: activeFilter === st.name ? '#f8fafc' : 'white', color: '#111827' }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = activeFilter === st.name ? '#f8fafc' : 'white'}
-                      >
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: st.color || '#ccc', flexShrink: 0 }}></span>
-                        {st.name}
-                      </div>
-                  ))}
-                </div>
-              )}
+      {/* CONTENIDO DE COLUMNAS (Izquierda: Tabla | Derecha: Equipos Activos) */}
+      <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        
+        {/* COLUMNA IZQUIERDA (TABLA) */}
+        <div style={{ flex: '1 1 60%', minWidth: '0' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+            
+            <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9' }}>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#111827' }}>Daily Jobs</h2>
+              <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: '0.9rem' }}>{dateCapitalized}</p>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>PROPERTY:</span>
-              <div style={{ width: '220px' }}>
-                <CustomSelect 
-                  options={[{ id: 'All', name: 'All Properties' }, ...uniqueHouses.map(h => ({ id: `${h.client}|${h.address}`, name: h.client }))]}
-                  value={houseFilter}
-                  onChange={setHouseFilter}
-                  placeholder="All Properties"
-                  icon={Home}
-                />
+            {/* FILTROS (Solo botón de Status) */}
+            <div style={{ display: 'flex', padding: '16px 20px', borderBottom: '1px solid #f1f5f9', gap: '16px' }}>
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    backgroundColor: activeFilter !== 'All' ? '#10b981' : 'white',
+                    color: activeFilter !== 'All' ? 'white' : '#111827',
+                    border: `1px solid ${activeFilter !== 'All' ? '#10b981' : '#e5e7eb'}`,
+                    padding: '8px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, 
+                    cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <Filter size={16} />
+                  {activeFilter === 'All' ? 'All Statuses' : activeFilter}
+                  <ChevronDown size={16} style={{ transform: isFilterMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+
+                {isFilterMenuOpen && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, marginTop: '8px',
+                    backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 50, minWidth: '220px', overflow: 'hidden'
+                  }}>
+                    <div
+                      onClick={() => { setActiveFilter('All'); setIsFilterMenuOpen(false); }}
+                      style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem', fontWeight: activeFilter === 'All' ? 700 : 500, backgroundColor: activeFilter === 'All' ? '#f8fafc' : 'white', color: '#111827' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = activeFilter === 'All' ? '#f8fafc' : 'white'}
+                    >
+                      All Statuses
+                    </div>
+                    
+                    {statuses
+                      .filter(st => st.name.toLowerCase() !== 'invoice' && st.id.toLowerCase() !== 'invoice')
+                      .map(st => (
+                        <div
+                          key={st.id}
+                          onClick={() => { setActiveFilter(st.name); setIsFilterMenuOpen(false); }}
+                          style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', fontWeight: activeFilter === st.name ? 700 : 500, backgroundColor: activeFilter === st.name ? '#f8fafc' : 'white', color: '#111827' }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = activeFilter === st.name ? '#f8fafc' : 'white'}
+                        >
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: st.color || '#ccc', flexShrink: 0 }}></span>
+                          {st.name}
+                        </div>
+                    ))}
+                  </div>
+                )}
               </div>
+            </div>
+
+            {/* TABLA DE TRABAJOS */}
+            <div style={{ overflowX: 'auto' }}>
+              {isLoading ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>Cargando propiedades...</div>
+              ) : filteredProperties.length === 0 ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>No se encontraron trabajos.</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>Actions</th>
+                      <th style={s.th}>Client</th>
+                      <th style={s.th}>Time</th>
+                      <th style={s.th}>Type</th>
+                      <th style={s.th}>Team</th>
+                      <th style={s.th}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProperties.map((house) => (
+                      <tr key={house.id} style={{ transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                        <td style={s.td}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => onCheckHouse(house)} style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: '4px' }} title="Check House"><CheckSquare size={16} /></button>
+                            <button onClick={() => handleOpenDetail(house)} style={{ background: 'none', border: 'none', color: '#8b5cf6', cursor: 'pointer', padding: '4px' }} title="View Details"><Eye size={16} /></button>
+                            <button onClick={() => handleOpenForm(house)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px' }} title="Edit"><Edit2 size={16} /></button>
+                            <button onClick={() => { setSelectedHouse(house); handleDelete(); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Delete"><Trash2 size={16} /></button>
+                          </div>
+                        </td>
+                        <td style={s.td}>
+                          <div style={{ fontWeight: 600 }}>{house.client}</div>
+                          <div style={{ fontSize: '0.8rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <MapPin size={12} /> {house.address || 'No address'}
+                          </div>
+                        </td>
+                        <td style={s.td}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#6b7280' }}>
+                            <Clock size={14} /> {house.timeIn || '08:00'}
+                          </div>
+                        </td>
+                        <td style={s.td}>{getRelationName(services, house.serviceId, 'Services 1')}</td>
+                        <td style={s.td}>{getRelationName(teams, house.teamId, 'Team 1')}</td>
+                        <td style={s.td}>
+                          <StatusPillSelector currentStatusId={house.statusId} statuses={statuses} onChange={(newStatus) => handleQuickStatusChange(house.id, newStatus)} disabled={isSaving} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
 
-        {/* TABLA DE TRABAJOS */}
-        <div style={{ overflowX: 'auto' }}>
-          {isLoading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>Cargando propiedades...</div>
-          ) : filteredProperties.length === 0 ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>No se encontraron trabajos.</div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={s.th}>Actions</th>
-                  <th style={s.th}>Client</th>
-                  <th style={s.th}>Time</th>
-                  <th style={s.th}>Type</th>
-                  <th style={s.th}>Team</th>
-                  <th style={s.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProperties.map((house) => (
-                  <tr key={house.id} style={{ transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                    <td style={s.td}>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => onCheckHouse(house)} style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: '4px' }} title="Check House"><CheckSquare size={16} /></button>
-                        <button onClick={() => handleOpenDetail(house)} style={{ background: 'none', border: 'none', color: '#8b5cf6', cursor: 'pointer', padding: '4px' }} title="View Details"><Eye size={16} /></button>
-                        <button onClick={() => handleOpenForm(house)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px' }} title="Edit"><Edit2 size={16} /></button>
-                        <button onClick={() => { setSelectedHouse(house); handleDelete(); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Delete"><Trash2 size={16} /></button>
-                      </div>
-                    </td>
-                    <td style={s.td}>
-                      <div style={{ fontWeight: 600 }}>{house.client}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <MapPin size={12} /> {house.address || 'No address'}
-                      </div>
-                    </td>
-                    <td style={s.td}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#6b7280' }}>
-                        <Clock size={14} /> {house.timeIn || '08:00'}
-                      </div>
-                    </td>
-                    <td style={s.td}>{getRelationName(services, house.serviceId, 'Services 1')}</td>
-                    <td style={s.td}>{getRelationName(teams, house.teamId, 'Team 1')}</td>
-                    <td style={s.td}>
-                      <StatusPillSelector currentStatusId={house.statusId} statuses={statuses} onChange={(newStatus) => handleQuickStatusChange(house.id, newStatus)} disabled={isSaving} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        {/* COLUMNA DERECHA (EQUIPOS ACTIVOS) */}
+        <div style={{ width: '320px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px' }}>
+          <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: '#111827' }}>Active Teams</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {teams.length === 0 && <p style={{ color: '#6b7280', fontSize: '0.9rem' }}>No teams created yet.</p>}
+            {teams.map(team => {
+              const teamJobs = propertiesWithScope.filter(p => p.teamId === team.id).length;
+              return (
+                <div key={team.id} style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Users size={20} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#111827' }}>{team.name}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{teamJobs} jobs today</div>
+                    </div>
+                  </div>
+                  <div style={{ height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: teamJobs > 0 ? '100%' : '0%', backgroundColor: '#3b82f6' }}></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
       
@@ -542,7 +536,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <h3>Formulario</h3>
             <p>Clientes Disponibles: {customersList.length} | Prioridades: {priorities.length}</p>
             
-            {/* LEYENDO LAS VARIABLES DE FOTOS PARA QUITAR ALERTAS TS6133 */}
             <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', margin: '15px auto', maxWidth: '400px', fontSize: '0.85rem', color: '#64748b', textAlign: 'left' }}>
               <strong style={{ display: 'block', marginBottom: '8px' }}>Estado de Adjuntos (Debug):</strong>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -591,7 +584,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             <h3>Payroll</h3>
             <p>Registros actuales de esta propiedad: {housePayrollRecords.length}</p>
             
-            {/* LEYENDO VARIABLES DE PAYROLL PARA QUITAR ALERTAS TS6133 */}
             <div style={{ padding: '15px', background: '#f8fafc', borderRadius: '8px', margin: '15px auto', maxWidth: '300px', fontSize: '0.85rem', color: '#64748b' }}>
               <p style={{ margin: '0 0 10px 0', fontSize: '1rem', fontWeight: 'bold', color: '#111827' }}>Monto Base: ${payrollForm.baseAmount}</p>
               <button 
