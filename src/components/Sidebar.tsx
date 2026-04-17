@@ -1,6 +1,6 @@
 import { 
   Building2, Home, Settings as SettingsIcon, Users, CalendarDays,
-  ShieldCheck, UserPlus, LogOut, DollarSign, ClipboardCheck, X 
+  ShieldCheck, UserPlus, LogOut, DollarSign, ClipboardCheck, X, FileText 
 } from 'lucide-react';
 import { auth } from '../config/firebase';
 import { signOut } from 'firebase/auth';
@@ -41,7 +41,6 @@ export default function Sidebar({
     }
   };
 
-  // Función para cambiar de pestaña y cerrar el menú automáticamente en móviles
   const handleNavClick = (tab: TabOptions) => {
     setActiveTab(tab);
     if (window.innerWidth <= 768) {
@@ -52,105 +51,21 @@ export default function Sidebar({
   return (
     <>
       <style>{`
-        /* Animaciones y Layout del Sidebar */
-        .sidebar-container {
-          background-color: #0f172a;
-          color: white;
-          display: flex;
-          flex-direction: column;
-          height: 100vh;
-          width: 260px;
-          transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          overflow-x: hidden;
-          flex-shrink: 0;
-          border-right: 1px solid rgba(255,255,255,0.05);
-        }
+        .sidebar-container { background-color: #0f172a; color: white; display: flex; flex-direction: column; height: 100vh; width: 260px; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow-x: hidden; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.05); }
+        .sidebar-container.closed { width: 80px; }
+        .mobile-close-btn { display: none; }
+        .sidebar-header { padding: 20px; display: flex; alignItems: center; justify-content: space-between; min-height: 70px; }
+        .logo-container { display: flex; alignItems: center; gap: 12px; overflow: hidden; white-space: nowrap; }
+        .nav-item { display: flex; alignItems: center; gap: 16px; padding: 12px 20px; color: #94a3b8; cursor: pointer; transition: all 0.2s; border: none; background: transparent; width: 100%; text-align: left; font-size: 0.95rem; font-weight: 500; white-space: nowrap; }
+        .nav-item:hover { color: white; background-color: rgba(255,255,255,0.05); }
+        .nav-item.active { color: #3b82f6; background-color: rgba(59, 130, 246, 0.1); border-right: 3px solid #3b82f6; }
+        .menu-label { color: #475569; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; padding: 0 20px; margin-bottom: 8px; }
 
-        .sidebar-container.closed {
-          width: 80px; /* Tamaño colapsado en PC */
-        }
-
-        .mobile-close-btn {
-          display: none;
-        }
-
-        .sidebar-header {
-          padding: 20px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          min-height: 70px;
-        }
-
-        .logo-container {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          overflow: hidden;
-          white-space: nowrap;
-        }
-
-        .nav-item {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          padding: 12px 20px;
-          color: #94a3b8;
-          cursor: pointer;
-          transition: all 0.2s;
-          border: none;
-          background: transparent;
-          width: 100%;
-          text-align: left;
-          font-size: 0.95rem;
-          font-weight: 500;
-          white-space: nowrap;
-        }
-
-        .nav-item:hover {
-          color: white;
-          background-color: rgba(255,255,255,0.05);
-        }
-
-        .nav-item.active {
-          color: #3b82f6;
-          background-color: rgba(59, 130, 246, 0.1);
-          border-right: 3px solid #3b82f6;
-        }
-
-        .menu-label {
-          color: #475569;
-          font-size: 0.75rem;
-          font-weight: 700;
-          letter-spacing: 0.05em;
-          padding: 0 20px;
-          margin-bottom: 8px;
-        }
-
-        /* Comportamiento 100% responsivo para móviles */
         @media (max-width: 768px) {
-          .sidebar-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw !important; /* 100% del ancho */
-            z-index: 10000;
-          }
-          .sidebar-container.closed {
-            transform: translateX(-100%);
-          }
-          .sidebar-container.open {
-            transform: translateX(0);
-          }
-          .mobile-close-btn {
-            display: flex;
-            background: rgba(255,255,255,0.1);
-            border: none;
-            color: white;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 8px;
-          }
+          .sidebar-container { position: fixed; top: 0; left: 0; width: 100vw !important; z-index: 10000; }
+          .sidebar-container.closed { transform: translateX(-100%); }
+          .sidebar-container.open { transform: translateX(0); }
+          .mobile-close-btn { display: flex; background: rgba(255,255,255,0.1); border: none; color: white; cursor: pointer; padding: 8px; border-radius: 8px; }
         }
       `}</style>
 
@@ -161,7 +76,6 @@ export default function Sidebar({
             <div className="logo-icon"><Building2 size={24} color="#3b82f6" /></div>
             {isSidebarOpen && <span style={{ fontWeight: 700, fontSize: '1.2rem', color: 'white' }}>Precise Cleaning</span>}
           </div>
-          {/* Botón X que solo aparece en móviles */}
           <button className="mobile-close-btn" onClick={() => setIsSidebarOpen(false)}>
             <X size={20} />
           </button>
@@ -170,10 +84,17 @@ export default function Sidebar({
         <nav className="sidebar-nav" style={{ flex: 1, overflowY: 'auto', paddingTop: '10px' }}>
           
           {canView('Houses') && (
-            <button className={`nav-item ${activeTab === 'houses' ? 'active' : ''}`} onClick={() => handleNavClick('houses')}>
-              <Home size={20} className="nav-icon" />
-              {isSidebarOpen && <span className="nav-text">Houses</span>}
-            </button>
+            <>
+              <button className={`nav-item ${activeTab === 'houses' ? 'active' : ''}`} onClick={() => handleNavClick('houses')}>
+                <Home size={20} className="nav-icon" />
+                {isSidebarOpen && <span className="nav-text">Houses</span>}
+              </button>
+
+              <button className={`nav-item ${activeTab === 'invoices' ? 'active' : ''}`} onClick={() => handleNavClick('invoices')}>
+                <FileText size={20} className="nav-icon" />
+                {isSidebarOpen && <span className="nav-text">Invoices</span>}
+              </button>
+            </>
           )}
 
           {canView('Calendar') && (
@@ -226,7 +147,6 @@ export default function Sidebar({
           )}
         </nav>
 
-        {/* BOTÓN DE LOGOUT */}
         <div style={{ padding: '20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
           <button 
             onClick={handleLogout}

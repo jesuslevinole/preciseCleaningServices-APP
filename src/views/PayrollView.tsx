@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
-  Search, Calendar, User, DollarSign, CheckCircle, Activity, MapPin, 
-  X, Home, FileText, CalendarDays, Clock, Wrench, Hash, Flag, Users, StickyNote, PenTool
+  Calendar, User, DollarSign, CheckCircle, Activity, MapPin, 
+  X, Home, FileText, CalendarDays, Clock, Wrench, Hash, Flag, Users, StickyNote, PenTool, Edit2, Trash2, Save
 } from 'lucide-react';
 import { payrollService } from '../services/payrollService';
 import { propertiesService } from '../services/propertiesService';
@@ -47,13 +47,21 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
   const [services, setServices] = useState<Service[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Estados de Modales
+  const [selectedPayroll, setSelectedPayroll] = useState<PayrollRecord | null>(null);
+  const [isEditingPayroll, setIsEditingPayroll] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
 
-  // Filtros
+  // Formulario temporal de edición
+  const [editForm, setEditForm] = useState<PayrollRecord | null>(null);
+
+  // Filtros (Iniciamos Status en 'Pending' por defecto)
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState(''); 
+  const [selectedStatus, setSelectedStatus] = useState('Pending'); 
 
   useEffect(() => {
     const fetchData = async () => {
@@ -123,6 +131,58 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
     }
   };
 
+  const handleDeletePayroll = async (id: string) => {
+    if (!window.confirm("Are you sure you want to completely delete this payment record? This action cannot be undone.")) return;
+    setIsSaving(true);
+    try {
+      await payrollService.delete(id);
+      setRecords(records.filter(r => r.id !== id));
+    } catch (error) {
+      console.error("Error deleting payroll record:", error);
+      alert("Failed to delete record.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleOpenEditModal = (record: PayrollRecord) => {
+    setEditForm({ ...record });
+    setSelectedPayroll(null); // Cerramos el de vista previa si estaba abierto
+    setIsEditingPayroll(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editForm || !editForm.id) return;
+    
+    // Recalcular total por si las moscas
+    const total = Number(editForm.baseAmount || 0) + Number(editForm.extraAmount || 0) - Number(editForm.discountAmount || 0);
+    const finalData = { ...editForm, totalAmount: total };
+
+    setIsSaving(true);
+    try {
+      await payrollService.update(editForm.id, finalData);
+      setRecords(records.map(r => r.id === editForm.id ? finalData : r));
+      setIsEditingPayroll(false);
+      setEditForm(null);
+    } catch (error) {
+      console.error("Error saving payroll edit:", error);
+      alert("Failed to save changes.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Efecto para actualizar el total automáticamente mientras se edita
+  useEffect(() => {
+    if (editForm) {
+      const total = Number(editForm.baseAmount || 0) + Number(editForm.extraAmount || 0) - Number(editForm.discountAmount || 0);
+      if (editForm.totalAmount !== total) {
+        setEditForm({ ...editForm, totalAmount: total });
+      }
+    }
+  }, [editForm?.baseAmount, editForm?.extraAmount, editForm?.discountAmount]);
+
+
   const s = {
     input: { padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem', outline: 'none', width: '100%', boxSizing: 'border-box' as const },
     label: { display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' as const, marginBottom: '6px' },
@@ -132,13 +192,17 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
     // Estilos del Modal
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
     title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
-    body: { padding: '30px', overflowY: 'auto', paddingBottom: '60px' } as React.CSSProperties, 
+    body: { padding: '30px', overflowY: 'auto', paddingBottom: '30px' } as React.CSSProperties, 
     detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
     detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } as React.CSSProperties,
     detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
     detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
     noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
     noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', width: '100%' } as React.CSSProperties,
+    
+    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
+    btnOutline: { backgroundColor: 'white', border: '1px solid #cbd5e1', color: '#334155', padding: '10px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
+    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' } as React.CSSProperties
   };
 
   return (
@@ -149,24 +213,24 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
         @media (min-width: 769px) { .modal-70 { width: 70%; } }
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
+        
+        .hamburger-btn { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; cursor: pointer; color: #111827; display: flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .hamburger-btn:hover { background-color: #f8fafc; }
+        
+        @media (max-width: 768px) {
+          .view-header-title-group { flex-direction: row-reverse; justify-content: space-between; width: 100%; }
+        }
       `}</style>
 
-      {/* HEADER RESPONSIVO ACTUALIZADO */}
+      {/* HEADER DINÁMICO */}
       <header className="main-header dashboard-header-container" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
-        <div className="view-header-title-group">
+        <div className="view-header-title-group" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button className="hamburger-btn" onClick={onOpenMenu} aria-label="Open menu">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
           <div>
             <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#111827', fontWeight: 700 }}>Payroll & Payments</h1>
             <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>Manage employee payments and debts</p>
-          </div>
-        </div>
-
-        <div className="dashboard-actions-wrapper" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div className="search-box-container" style={{ display: 'flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '0 16px', height: '42px', flex: 1, minWidth: '200px' }}>
-            <Search size={16} color="#9ca3af" />
-            <input type="text" placeholder="Search records..." style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', padding: '10px', fontSize: '0.9rem', width: '100%', color: '#111827' }} />
           </div>
         </div>
       </header>
@@ -233,12 +297,12 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
           <thead>
             <tr>
+              <th style={{...s.th, width: '100px'}}>Actions</th>
               <th style={s.th}>Property</th>
               <th style={s.th}>Date</th>
               <th style={s.th}>Employee</th>
               <th style={{...s.th, textAlign: 'right'}}>Total Amount</th>
               <th style={{...s.th, textAlign: 'center'}}>Status</th>
-              <th style={{...s.th, textAlign: 'right'}}>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -252,13 +316,20 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
                return (
                  <tr 
                    key={record.id} 
-                   onClick={() => prop && setSelectedHouse(prop)}
-                   style={{ transition: 'background-color 0.2s', cursor: prop ? 'pointer' : 'default' }} 
+                   onClick={() => setSelectedPayroll(record)} 
+                   style={{ transition: 'background-color 0.2s', cursor: 'pointer' }} 
                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f8fafc'} 
                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                  >
+                   <td style={s.td} onClick={(e) => e.stopPropagation()}>
+                     <div style={{ display: 'flex', gap: '4px' }}>
+                       <button onClick={() => handleOpenEditModal(record)} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px', display: 'flex' }}><Edit2 size={16} /></button>
+                       <button onClick={() => handleDeletePayroll(record.id as string)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px', display: 'flex' }}><Trash2 size={16} /></button>
+                     </div>
+                   </td>
+
                    <td style={s.td}>
-                     <div style={{ fontWeight: 600, color: '#111827' }}>{prop ? prop.client : 'Unknown'}</div>
+                     <div style={{ fontWeight: 600, color: '#111827' }}>{prop ? prop.client : 'Unknown Property'}</div>
                      <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}><MapPin size={12} /> {prop ? prop.address : 'Unknown Address'}</div>
                    </td>
                    
@@ -269,20 +340,14 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
                    <td style={{...s.td, fontWeight: 700, color: '#111827', textAlign: 'right', fontSize: '1.05rem'}}>${record.totalAmount.toFixed(2)}</td>
                    
                    <td style={{...s.td, textAlign: 'center'}}>
-                     <span style={{ 
-                       padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700,
-                       backgroundColor: isPaid ? '#d1fae5' : '#ffedd5',
-                       color: isPaid ? '#047857' : '#b45309'
-                     }}>
-                       {record.status || 'Pending'}
-                     </span>
-                   </td>
-                   
-                   <td style={{...s.td, textAlign: 'right'}}>
                      {isPaid ? (
-                       <button onClick={(e) => { e.stopPropagation(); handleMarkAsPending(record.id as string); }} style={{ background: 'none', border: '1px solid #e2e8f0', color: '#64748b', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>Undo</button>
+                       <button onClick={(e) => { e.stopPropagation(); handleMarkAsPending(record.id as string); }} style={{ background: 'none', border: 'none', color: '#10b981', padding: '6px 12px', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', margin: '0 auto' }}>
+                         <CheckCircle size={14}/> Paid
+                       </button>
                      ) : (
-                       <button onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(record.id as string); }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>Mark Paid</button>
+                       <button onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(record.id as string); }} style={{ backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', padding: '6px 12px', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', margin: '0 auto', display: 'block' }}>
+                         Mark Paid
+                       </button>
                      )}
                    </td>
                    
@@ -293,6 +358,146 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
           </tbody>
         </table>
       </div>
+
+      {/* --- MODAL DETALLE DEL PAGO --- */}
+      {selectedPayroll && (
+        <div className="modal-overlay-centered" onClick={() => setSelectedPayroll(null)}>
+          <div className="modal-70" style={{ maxWidth: '650px' }} onClick={e => e.stopPropagation()}>
+            <header style={s.header}>
+              <h3 style={s.title}>Payment Details</h3>
+              <button style={s.closeBtn} onClick={() => setSelectedPayroll(null)}><X size={24} /></button>
+            </header>
+
+            <div style={s.body}>
+              {(() => {
+                const emp = employees.find(e => e.id === selectedPayroll.employeeId);
+                const prop = properties.find(p => p.id === selectedPayroll.propertyId);
+                const isPaid = selectedPayroll.status === 'Paid';
+
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+                      <div>
+                        <h4 style={{ margin: '0 0 6px 0', fontSize: '1.3rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <User size={22} color="#3b82f6" /> {emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown Employee'}
+                        </h4>
+                        <div style={{ color: '#64748b', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CalendarDays size={16} /> Paid on: {selectedPayroll.date}
+                        </div>
+                      </div>
+                      <span style={{ backgroundColor: isPaid ? '#d1fae5' : '#ffedd5', color: isPaid ? '#047857' : '#b45309', padding: '8px 16px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: 700 }}>
+                        {selectedPayroll.status || 'Pending'}
+                      </span>
+                    </div>
+
+                    <div style={s.detailBanner}>
+                      <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <span style={{ ...s.detailLabel, color: '#1e40af' }}><Home size={14} /> PROPERTY COMPLETED</span>
+                          <span style={{ fontSize: '1.15rem', color: '#1e3a8a', fontWeight: 700, marginTop: '4px' }}>{prop ? prop.client : 'Unknown Property'}</span>
+                          <span style={{ fontSize: '0.85rem', color: '#3b82f6', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <MapPin size={14}/> {prop ? prop.address : 'Unknown Address'}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={() => { setSelectedHouse(prop || null); setSelectedPayroll(null); }}
+                          style={{ backgroundColor: 'white', border: '1px solid #bfdbfe', color: '#1e40af', padding: '10px 16px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#eff6ff'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'white'}
+                        >
+                          <FileText size={18} /> View Property
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                      <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Base Amount</span>
+                        <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#1e293b', marginTop: '4px' }}>${Number(selectedPayroll.baseAmount || 0).toFixed(2)}</span>
+                      </div>
+                      <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Extra Amount</span>
+                        <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#1e293b', marginTop: '4px' }}>+ ${Number(selectedPayroll.extraAmount || 0).toFixed(2)}</span>
+                        {selectedPayroll.extraNote && <span style={{fontSize: '0.8rem', color: '#64748b', marginTop: '6px', fontStyle: 'italic'}}>"{selectedPayroll.extraNote}"</span>}
+                      </div>
+                      <div style={{ padding: '16px', backgroundColor: '#fef2f2', borderRadius: '8px', border: '1px solid #fecaca', display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#991b1b', textTransform: 'uppercase' }}>Discount</span>
+                        <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#dc2626', marginTop: '4px' }}>- ${Number(selectedPayroll.discountAmount || 0).toFixed(2)}</span>
+                        {selectedPayroll.discountNote && <span style={{fontSize: '0.8rem', color: '#991b1b', marginTop: '6px', fontStyle: 'italic'}}>"{selectedPayroll.discountNote}"</span>}
+                      </div>
+                      <div style={{ padding: '16px', backgroundColor: '#ecfdf5', borderRadius: '8px', border: '1px solid #a7f3d0', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#065f46', textTransform: 'uppercase' }}>TOTAL PAYOUT</span>
+                        <span style={{ fontSize: '1.8rem', fontWeight: 800, color: '#047857', marginTop: '4px' }}>${Number(selectedPayroll.totalAmount || 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+            
+            <footer style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button style={s.btnOutline} onClick={() => setSelectedPayroll(null)}>Close</button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL EDICIÓN DEL PAGO --- */}
+      {isEditingPayroll && editForm && (
+        <div className="modal-overlay-centered" onClick={() => setIsEditingPayroll(false)}>
+          <div className="modal-70" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+            <header style={s.header}>
+              <h3 style={s.title}>Edit Payment</h3>
+              <button style={s.closeBtn} onClick={() => setIsEditingPayroll(false)}><X size={20} /></button>
+            </header>
+            
+            <div style={s.body}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={s.label}>Base Amount ($) <span style={{ color: '#3b82f6' }}>*</span></label>
+                    <input type="number" step="0.01" style={s.input} placeholder="0.00" value={editForm.baseAmount || ''} onChange={(e) => setEditForm({ ...editForm, baseAmount: Number(e.target.value) })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={s.label}>Extra ($)</label>
+                    <input type="number" step="0.01" style={s.input} placeholder="0.00" value={editForm.extraAmount || ''} onChange={(e) => setEditForm({ ...editForm, extraAmount: Number(e.target.value) })} />
+                  </div>
+                  <div style={{ flex: 2 }}>
+                    <label style={s.label}>Extra Note</label>
+                    <input type="text" style={s.input} placeholder="Reason for extra..." value={editForm.extraNote || ''} onChange={(e) => setEditForm({ ...editForm, extraNote: e.target.value })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={s.label}>Discount ($)</label>
+                    <input type="number" step="0.01" style={s.input} placeholder="0.00" value={editForm.discountAmount || ''} onChange={(e) => setEditForm({ ...editForm, discountAmount: Number(e.target.value) })} />
+                  </div>
+                  <div style={{ flex: 2 }}>
+                    <label style={s.label}>Discount Note</label>
+                    <input type="text" style={s.input} placeholder="Reason for discount..." value={editForm.discountNote || ''} onChange={(e) => setEditForm({ ...editForm, discountNote: e.target.value })} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', backgroundColor: '#ecfdf5', border: '1px solid #10b981', borderRadius: '8px', marginTop: '8px' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: 700, color: '#047857' }}>TOTAL TO PAY:</span>
+                  <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#047857' }}>${(editForm.totalAmount || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            <footer style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button style={s.btnOutline} onClick={() => setIsEditingPayroll(false)}>Cancel</button>
+              <button style={{ ...s.btnPrimary, backgroundColor: '#3b82f6' }} onClick={handleSaveEdit} disabled={isSaving}>
+                {isSaving ? 'Saving...' : <><Save size={18}/> Save Changes</>}
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
 
       {/* --- MODAL DETALLE DE PROPIEDAD (READ ONLY) --- */}
       {selectedHouse && (
@@ -402,7 +607,7 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
               </div>
             </div>
             
-            <footer style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end' }}>
+            <footer style={{ padding: '16px 24px', backgroundColor: '#f8fafc', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px', borderRadius: '0 0 12px 12px' }}>
               <button style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' }} onClick={() => setSelectedHouse(null)}>Close</button>
             </footer>
           </div>

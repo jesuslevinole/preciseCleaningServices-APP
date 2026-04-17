@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Search, MapPin, Plus, X, Edit2, Trash2, 
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
-  Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck, DollarSign, Filter
+  Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck, DollarSign
 } from 'lucide-react';
 
 import type { Property, Status, Team, Priority, Service, Customer, SystemUser, Role, PayrollRecord } from '../types/index';
@@ -159,9 +159,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   
   const [activeFilter, setActiveFilter] = useState('All');
   const [houseFilter, setHouseFilter] = useState('All'); 
-  const [invoiceFilter, setInvoiceFilter] = useState('All'); 
-  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false); // ESTADO PARA EL BOTÓN DE FILTROS
-
+  
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
@@ -251,7 +249,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     return team.id === currentUser.teamId;
   });
 
-  // EXTRAER LAS CASAS ÚNICAS OMITIENDO LAS QUE TIENEN ESTATUS "INVOICE"
   const uniqueHouses = Array.from(new Set(
     propertiesWithScope
       .filter(p => {
@@ -265,11 +262,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     return { client, address };
   }).sort((a, b) => a.client.localeCompare(b.client));
 
-  // APLICAMOS FILTROS
+  // APLICAMOS FILTROS Y ELIMINAMOS CASAS CON ESTATUS 'INVOICE'
   const filteredProperties = propertiesWithScope.filter(p => {
+    const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
+    const isStatusInvoice = st?.name?.toLowerCase() === 'invoice' || p.statusId?.toLowerCase() === 'invoice';
+    
+    // MAGIA: Si el estatus es invoice, la casa se desaparece de esta vista.
+    if (isStatusInvoice) return false;
+
     let passStatus = true;
     if (activeFilter !== 'All') {
-      const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
       passStatus = st?.name === activeFilter;
     }
     
@@ -277,16 +279,10 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     if (houseFilter !== 'All') {
       passHouse = `${p.client || 'Unknown'}|${p.address || 'Unknown'}` === houseFilter;
     }
-
-    let passInvoice = true;
-    if (invoiceFilter !== 'All') {
-      passInvoice = p.invoiceStatus === invoiceFilter;
-    }
     
-    return passStatus && passHouse && passInvoice;
+    return passStatus && passHouse;
   });
 
-  // TABS DEL DASHBOARD ORDENADOS
   const dashboardTabs = statuses
     .filter(st => (st as any).showInDashboard)
     .sort((a, b) => Number((a as any).dashboardOrder || 0) - Number((b as any).dashboardOrder || 0));
@@ -348,7 +344,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setFormData({ ...formData, assignedWorkers: newWorkersList });
   };
 
-  // --- LÓGICA DE PAYROLL ---
   const handleOpenPayrollForm = (houseId: string) => {
     if (!houseId) return alert("Must save the house first.");
     setPayrollForm({ propertyId: houseId, date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0 });
@@ -656,6 +651,30 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         .hamburger-btn:hover {
           background-color: #f8fafc;
         }
+        
+        .filters-section {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          align-items: center;
+          width: 100%;
+          justify-content: space-between;
+          margin-top: 16px;
+        }
+        .tabs-container {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding-bottom: 4px;
+          flex: 1;
+          min-width: 250px;
+        }
+        .property-select-container {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          white-space: nowrap;
+        }
 
         @media (max-width: 768px) {
           .view-header-title-group {
@@ -670,6 +689,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           .responsive-table td:last-child { border-bottom: none; padding-bottom: 0; }
           .responsive-table td::before { content: attr(data-label); font-weight: 700; color: #6b7280; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
           .mobile-client-cell { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+          
+          /* Apilamos los filtros en móvil */
+          .filters-section {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .property-select-container select {
+            flex: 1;
+            max-width: 100% !important;
+          }
         }
       `}</style>
 
@@ -732,10 +761,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{dateCapitalized}</p>
               </div>
 
-              {/* GRUPO DE TABS Y FILTRO LIMPIO */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', gap: '16px', width: '100%' }}>
-                
-                <div className="dashboard-filters" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', flex: 1 }}>
+              {/* FILTROS DE DASHBOARD Y CASA MEJORADOS */}
+              <div className="filters-section">
+                <div className="tabs-container">
                   <button onClick={() => setActiveFilter('All')} style={s.pillBtn(activeFilter === 'All')}>All</button>
                   {dashboardTabs.map(st => (
                     <button key={st.id} onClick={() => setActiveFilter(st.name)} style={s.pillBtn(activeFilter === st.name)}>
@@ -744,53 +772,23 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   ))}
                 </div>
 
-                <div style={{ position: 'relative' }}>
-                  <button 
-                    onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
-                    style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                <div className="property-select-container">
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>Property:</span>
+                  <select 
+                    style={{...s.input, width: 'auto', padding: '6px 12px', minWidth: '160px', maxWidth: '250px', borderRadius: '20px', cursor: 'pointer', height: '34px'}} 
+                    value={houseFilter} 
+                    onChange={e => setHouseFilter(e.target.value)}
                   >
-                    <Filter size={16} /> Filters {(houseFilter !== 'All' || invoiceFilter !== 'All') && <span style={{backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem'}}>!</span>}
-                  </button>
-
-                  {isFilterMenuOpen && (
-                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', padding: '16px', zIndex: 100, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      
-                      <div>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Property</label>
-                        <select 
-                          style={{...s.input, padding: '8px 12px', cursor: 'pointer'}} 
-                          value={houseFilter} 
-                          onChange={e => setHouseFilter(e.target.value)}
-                        >
-                          <option value="All">All Properties</option>
-                          {uniqueHouses.map((h, idx) => (
-                            <option key={idx} value={`${h.client}|${h.address}`}>{h.client} - {h.address}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Invoice Status</label>
-                        <select 
-                          style={{...s.input, padding: '8px 12px', cursor: 'pointer'}} 
-                          value={invoiceFilter} 
-                          onChange={e => setInvoiceFilter(e.target.value)}
-                        >
-                          <option value="All">All Invoices</option>
-                          <option value="Pending">Pending</option>
-                          <option value="Paid">Paid</option>
-                          <option value="Needs Invoice">Needs Invoice</option>
-                        </select>
-                      </div>
-
-                    </div>
-                  )}
+                    <option value="All">All Properties</option>
+                    {uniqueHouses.map((h, idx) => (
+                      <option key={idx} value={`${h.client}|${h.address}`}>{h.client} - {h.address}</option>
+                    ))}
+                  </select>
                 </div>
-
               </div>
             </div>
 
-            <div style={{ overflowX: 'auto', padding: '10px 20px 40px 20px', minHeight: '300px' }}>
+            <div style={{ overflow: 'visible', padding: '10px 20px 40px 20px', minHeight: '300px' }}>
               <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '100%' }}>
                 <thead>
                   <tr>

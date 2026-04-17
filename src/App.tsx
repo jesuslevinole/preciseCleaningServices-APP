@@ -6,6 +6,7 @@ import SettingsView from './views/SettingsView';
 import CalendarView from './views/CalendarView';
 import QualityCheckView from './views/QualityCheckView'; 
 import PayrollView from './views/PayrollView'; 
+import InvoicesView from './views/InvoicesView';
 import LoginView from './views/auth/LoginView';
 import RolesView from './views/admin/RolesView';
 import UsersView from './views/admin/UsersView';
@@ -94,7 +95,6 @@ export default function App() {
     setActiveTab('qc_report');
   };
 
-  // Función que intercala entre abrir y cerrar el menú
   const toggleMenu = () => setIsSidebarOpen(!isSidebarOpen);
 
   if (!isAuthenticated) {
@@ -126,6 +126,17 @@ export default function App() {
           />
         )}
         
+        {activeTab === 'invoices' && (
+          <InvoicesView 
+            properties={visibleProperties as any} 
+            setProperties={setProperties as any} 
+            onOpenMenu={toggleMenu} 
+            currentUser={currentUser}
+            activeRole={activeRole}
+            isSuperAdmin={isSuperAdmin}
+          />
+        )}
+
         {activeTab === 'calendar' && <CalendarView properties={visibleProperties as any} onOpenMenu={toggleMenu} />}
         
         {activeTab === 'payroll' && <PayrollView onOpenMenu={toggleMenu} />}
@@ -160,7 +171,7 @@ export default function App() {
         
         {activeTab === 'users' && <UsersView onOpenMenu={toggleMenu} roles={roles} />}
 
-        {(activeTab === 'invoices' || activeTab === 'done' || activeTab === 'qc_route') && (
+        {(activeTab === 'done' || activeTab === 'qc_route') && (
           <div className="fade-in" style={{ padding: '40px', textAlign: 'center', color: '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <h2 style={{ color: '#111827', fontSize: '1.5rem', margin: '0 0 8px 0' }}>Under Construction</h2>
             <p style={{ margin: 0 }}>The {activeTab.replace('_', ' ')} view is currently being developed.</p>
