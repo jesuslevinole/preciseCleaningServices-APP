@@ -316,7 +316,7 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
                return (
                  <tr 
                    key={record.id} 
-                   onClick={() => setSelectedPayroll(record)} 
+                   onClick={() => setSelectedPayroll(record)}
                    style={{ transition: 'background-color 0.2s', cursor: 'pointer' }} 
                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f8fafc'} 
                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -437,6 +437,11 @@ export default function PayrollView({ onOpenMenu }: PayrollViewProps) {
             
             <footer style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button style={s.btnOutline} onClick={() => setSelectedPayroll(null)}>Close</button>
+              {selectedPayroll.status === 'Paid' ? (
+                <button onClick={(e) => { e.stopPropagation(); handleMarkAsPending(selectedPayroll.id as string); setSelectedPayroll(null); }} style={s.btnOutline}>Mark as Pending</button>
+              ) : (
+                <button onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(selectedPayroll.id as string); setSelectedPayroll(null); }} style={{...s.btnPrimary, backgroundColor: '#10b981'}}><CheckCircle size={18}/> Mark as Paid</button>
+              )}
             </footer>
           </div>
         </div>

@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Search, MapPin, Plus, X, Edit2, Trash2, 
   Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
-  Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck, DollarSign
+  Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck, DollarSign, Filter, CheckCircle, Calendar
 } from 'lucide-react';
 
-import type { Property, Status, Team, Priority, Service, Customer, SystemUser, Role, PayrollRecord } from '../types/index';
+// Importamos Property como BaseProperty para poder extenderlo
+import type { Property as BaseProperty, Status, Team, Priority, Service, Customer, SystemUser, Role, PayrollRecord } from '../types/index';
 
 import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
@@ -14,6 +15,12 @@ import { storageService } from '../services/storageService';
 import { payrollService } from '../services/payrollService';
 import { db } from '../config/firebase';
 import { collection, getDocs } from 'firebase/firestore';
+
+// Extendemos el tipo localmente para que TypeScript no arroje errores
+type Property = BaseProperty & {
+  employeeFinishedBy?: string | null;
+  employeeFinishedAt?: string | null;
+};
 
 const collectionMap: Record<string, string> = {
   team: 'settings_teams',
@@ -145,6 +152,12 @@ const getRelationColor = (list: any[], idOrName: string) => {
   return list.find(item => String(item.id).toLowerCase().trim() === safeVal || String(item.name).toLowerCase().trim() === safeVal)?.color;
 };
 
+const formatDateTime = (isoString?: string | null) => {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  return d.toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+};
+
 interface HousesViewProps {
   onOpenMenu: () => void;
   properties: Property[];
@@ -159,7 +172,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   
   const [activeFilter, setActiveFilter] = useState('All');
   const [houseFilter, setHouseFilter] = useState('All'); 
-  
+  const [invoiceFilter, setInvoiceFilter] = useState('All'); 
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
@@ -213,7 +228,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           getDocs(collection(db, 'system_users')).then(snap => snapshotToData(snap)).catch(() => []) 
         ]);
 
-        if (propsData) setProperties(propsData);
+        if (propsData) setProperties(propsData as Property[]);
         if (statusData) setStatuses((statusData as Status[]).sort((a, b) => Number(a.order) - Number(b.order)));
         if (teamData) setTeams(teamData as Team[]);
         if (prioData) setPriorities(prioData as Priority[]);
@@ -279,8 +294,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     if (houseFilter !== 'All') {
       passHouse = `${p.client || 'Unknown'}|${p.address || 'Unknown'}` === houseFilter;
     }
+
+    let passInvoice = true;
+    if (invoiceFilter !== 'All') {
+      passInvoice = p.invoiceStatus === invoiceFilter;
+    }
     
-    return passStatus && passHouse;
+    return passStatus && passHouse && passInvoice;
   });
 
   const dashboardTabs = statuses
@@ -301,6 +321,75 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleMarkAsFinished = async () => {
+    if (!selectedHouse) return;
+    if (!window.confirm("Are you sure you want to mark this job as finished?")) return;
+    
+    setIsSaving(true);
+    try {
+      const finishedAt = new Date().toISOString();
+      const finishedBy = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unknown';
+      
+      await propertiesService.update(selectedHouse.id, { 
+        employeeFinishedAt: finishedAt, 
+        employeeFinishedBy: finishedBy 
+      } as any);
+      
+      const updatedHouse = { ...selectedHouse, employeeFinishedAt: finishedAt, employeeFinishedBy: finishedBy };
+      setSelectedHouse(updatedHouse);
+      setProperties(properties.map(p => p.id === selectedHouse.id ? updatedHouse : p));
+    } catch (error) {
+      console.error("Error marking as finished:", error);
+      alert("Failed to mark property as finished.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUndoFinished = async () => {
+    if (!selectedHouse) return;
+    if (!window.confirm("Undo finished status?")) return;
+    
+    setIsSaving(true);
+    try {
+      await propertiesService.update(selectedHouse.id, { 
+        employeeFinishedAt: null, 
+        employeeFinishedBy: null 
+      } as any);
+      
+      const updatedHouse = { ...selectedHouse, employeeFinishedAt: undefined, employeeFinishedBy: undefined };
+      setSelectedHouse(updatedHouse);
+      setProperties(properties.map(p => p.id === selectedHouse.id ? updatedHouse : p));
+    } catch (error) {
+      console.error("Error undoing finished status:", error);
+      alert("Failed to undo finished status.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleGoogleCalendarSync = () => {
+    if (!selectedHouse || !selectedHouse.scheduleDate || !selectedHouse.timeIn) {
+      return alert("Por favor asegúrate de que la propiedad tenga fecha de Schedule y hora Time In.");
+    }
+
+    const datePart = selectedHouse.scheduleDate.replace(/-/g, '');
+    const timePart = selectedHouse.timeIn.replace(/:/g, '') + '00';
+    const startDateTime = `${datePart}T${timePart}`;
+    
+    const [year, month, day] = selectedHouse.scheduleDate.split('-').map(Number);
+    const [hour, min] = selectedHouse.timeIn.split(':').map(Number);
+    const endDateObj = new Date(year, month - 1, day, hour + 2, min);
+    
+    const endDatePart = endDateObj.toISOString().split('T')[0].replace(/-/g, '');
+    const endTimePart = endDateObj.toTimeString().split(' ')[0].replace(/:/g, '');
+    const endDateTime = `${endDatePart}T${endTimePart}`;
+
+    const calendarUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('Cleaning: ' + selectedHouse.client)}&dates=${startDateTime}/${endDateTime}&details=${encodeURIComponent(selectedHouse.note || '')}&location=${encodeURIComponent(selectedHouse.address)}&sf=true&output=xml`;
+    
+    window.open(calendarUrl, '_blank');
   };
 
   const toggleWorkerAssignmentDetail = async (workerId: string) => {
@@ -352,7 +441,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
   const handleSavePayroll = async () => {
     if (!payrollForm.employeeId) return alert("Please select an employee.");
-    if (payrollForm.baseAmount <= 0) return alert("Base amount must be greater than 0.");
+    if (Number(payrollForm.baseAmount) <= 0) return alert("Base amount must be greater than 0.");
     
     setIsSaving(true);
     try {
@@ -383,47 +472,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     } finally {
       setIsSaving(false);
     }
-  };
-
-  useEffect(() => {
-    const total = Number(payrollForm.baseAmount || 0) + Number(payrollForm.extraAmount || 0) - Number(payrollForm.discountAmount || 0);
-    setPayrollForm(prev => ({ ...prev, totalAmount: total }));
-  }, [payrollForm.baseAmount, payrollForm.extraAmount, payrollForm.discountAmount]);
-
-  const s = {
-    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
-    title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
-    body: { padding: '30px', overflowY: 'auto', paddingBottom: '60px' } as React.CSSProperties, 
-    footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
-    footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
-
-    label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' } as React.CSSProperties,
-    inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', width: '100%' } as React.CSSProperties,
-    icon: { position: 'absolute', left: '14px', color: '#6b7280', pointerEvents: 'none' } as React.CSSProperties,
-    input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s' } as React.CSSProperties,
-
-    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s', opacity: isSaving ? 0.7 : 1 } as React.CSSProperties,
-    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
-    btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
-    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' },
-
-    detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
-    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } as React.CSSProperties,
-    detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
-    detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
-    noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
-    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', width: '100%' } as React.CSSProperties,
-
-    kpiCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' },
-    kpiIconBox: (color: string) => ({ backgroundColor: `${color}15`, color: color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
-    tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' } as React.CSSProperties,
-    pillBtn: (active: boolean) => ({ padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: active ? '#10b981' : 'transparent', color: active ? 'white' : '#6b7280', transition: 'all 0.2s', whiteSpace: 'nowrap' as const }),
-
-    th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
-    td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
-
-    dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' } as React.CSSProperties,
-    mainColumns: { display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'flex-start' } as React.CSSProperties,
   };
 
   const handleOpenForm = (house?: Property) => {
@@ -610,6 +658,11 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
+  useEffect(() => {
+    const total = Number(payrollForm.baseAmount || 0) + Number(payrollForm.extraAmount || 0) - Number(payrollForm.discountAmount || 0);
+    setPayrollForm(prev => ({ ...prev, totalAmount: total }));
+  }, [payrollForm.baseAmount, payrollForm.extraAmount, payrollForm.discountAmount]);
+
   const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
   const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
   const kpiIcons = [Briefcase, Clock, ShieldCheck, AlertTriangle];
@@ -617,6 +670,58 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const today = new Date();
   const dateFormatted = today.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const dateCapitalized = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1);
+
+  const s = {
+    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
+    title: { fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 },
+    body: { padding: '30px', overflowY: 'auto', paddingBottom: '60px' } as React.CSSProperties, 
+    footer: { display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
+    footerBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', flexShrink: 0, flexWrap: 'wrap' } as React.CSSProperties,
+
+    label: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' } as React.CSSProperties,
+    inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center', width: '100%' } as React.CSSProperties,
+    icon: { position: 'absolute', left: '14px', color: '#6b7280', pointerEvents: 'none' } as React.CSSProperties,
+    input: { backgroundColor: '#ffffff', padding: '12px 14px 12px 40px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.95rem', color: '#111827', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s' } as React.CSSProperties,
+
+    actionBtn: { 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      gap: '6px', 
+      height: '36px', 
+      padding: '0 16px', 
+      borderRadius: '6px', 
+      fontWeight: 600, 
+      cursor: 'pointer', 
+      fontSize: '0.85rem', 
+      transition: 'all 0.2s', 
+      boxSizing: 'border-box' as const, 
+      whiteSpace: 'nowrap' as const 
+    },
+
+    btnPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s', opacity: isSaving ? 0.7 : 1 } as React.CSSProperties,
+    btnOutline: { backgroundColor: 'white', border: '1px solid #e5e7eb', color: '#111827', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.2s' } as React.CSSProperties,
+    btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
+    closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' },
+
+    detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
+    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } as React.CSSProperties,
+    detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
+    detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
+    noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
+    noteBoxOrange: { backgroundColor: '#fff7ed', padding: '16px', borderRadius: '8px', border: '1px solid #ffedd5', width: '100%' } as React.CSSProperties,
+
+    kpiCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' },
+    kpiIconBox: (color: string) => ({ backgroundColor: `${color}15`, color: color, width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
+    tableHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '16px' } as React.CSSProperties,
+    pillBtn: (active: boolean) => ({ padding: '6px 16px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: active ? '#10b981' : 'transparent', color: active ? 'white' : '#6b7280', transition: 'all 0.2s', whiteSpace: 'nowrap' as const }),
+
+    th: { padding: '12px 20px', textAlign: 'left' as const, fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' as const },
+    td: { padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', color: '#111827', verticalAlign: 'middle' as const },
+
+    dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' } as React.CSSProperties,
+    mainColumns: { display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'flex-start' } as React.CSSProperties,
+  };
 
   return (
     <div className="fade-in" style={{ padding: '20px' }}>
@@ -674,6 +779,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           align-items: center;
           gap: 8px;
           white-space: nowrap;
+          position: relative;
         }
 
         @media (max-width: 768px) {
@@ -695,9 +801,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             flex-direction: column;
             align-items: stretch;
           }
-          .property-select-container select {
-            flex: 1;
-            max-width: 100% !important;
+          .property-select-container {
+            width: 100%;
+          }
+          .property-select-container button {
+            width: 100%;
+            justify-content: center;
           }
         }
       `}</style>
@@ -773,17 +882,46 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                 </div>
 
                 <div className="property-select-container">
-                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>Property:</span>
-                  <select 
-                    style={{...s.input, width: 'auto', padding: '6px 12px', minWidth: '160px', maxWidth: '250px', borderRadius: '20px', cursor: 'pointer', height: '34px'}} 
-                    value={houseFilter} 
-                    onChange={e => setHouseFilter(e.target.value)}
+                  <button 
+                    onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                    style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
                   >
-                    <option value="All">All Properties</option>
-                    {uniqueHouses.map((h, idx) => (
-                      <option key={idx} value={`${h.client}|${h.address}`}>{h.client} - {h.address}</option>
-                    ))}
-                  </select>
+                    <Filter size={16} /> Filters {(houseFilter !== 'All' || invoiceFilter !== 'All') && <span style={{backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem'}}>!</span>}
+                  </button>
+
+                  {isFilterMenuOpen && (
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', padding: '16px', zIndex: 100, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Property</label>
+                        <select 
+                          style={{...s.input, padding: '8px 12px', cursor: 'pointer'}} 
+                          value={houseFilter} 
+                          onChange={e => setHouseFilter(e.target.value)}
+                        >
+                          <option value="All">All Properties</option>
+                          {uniqueHouses.map((h, idx) => (
+                            <option key={idx} value={`${h.client}|${h.address}`}>{h.client} - {h.address}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Invoice Status</label>
+                        <select 
+                          style={{...s.input, padding: '8px 12px', cursor: 'pointer'}} 
+                          value={invoiceFilter} 
+                          onChange={e => setInvoiceFilter(e.target.value)}
+                        >
+                          <option value="All">All Invoices</option>
+                          <option value="Pending">Pending</option>
+                          <option value="Paid">Paid</option>
+                          <option value="Needs Invoice">Needs Invoice</option>
+                        </select>
+                      </div>
+
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -819,7 +957,10 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                         </td>
                         <td data-label="Client" style={s.td}>
                           <div className="mobile-client-cell">
-                            <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{prop.client}</div>
+                            <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {prop.client}
+                              {(prop as any).employeeFinishedBy && <span title="Finished" style={{ display: 'flex' }}><CheckCircle size={14} color="#10b981" /></span>}
+                            </div>
                             <div style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={12} /> {prop.address}</div>
                           </div>
                         </td>
@@ -1066,11 +1207,43 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           <div className="modal-70" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
               <h3 style={s.title}>Property Overview</h3>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                {canEdit && <button onClick={() => handleOpenPayrollForm(selectedHouse.id)} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><DollarSign size={14} /> Register Payment</button>}
-                {canEdit && <button onClick={handleDuplicate} disabled={isSaving} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><Copy size={14} /> Duplicate</button>}
-                <button onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}><ClipboardCheck size={14} /> Quality Check</button>
-                <button style={{ ...s.closeBtn, marginLeft: '8px' }} onClick={() => setIsDetailModalOpen(false)}><X size={24} /></button>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button 
+                  onClick={handleGoogleCalendarSync} 
+                  style={{ ...s.actionBtn, backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74' }}
+                >
+                  <Calendar size={16} /> Sync Calendar
+                </button>
+                <button 
+                  onClick={(selectedHouse as any).employeeFinishedBy ? handleUndoFinished : handleMarkAsFinished} 
+                  disabled={isSaving} 
+                  style={{ 
+                    ...s.actionBtn,
+                    backgroundColor: (selectedHouse as any).employeeFinishedBy ? '#f8fafc' : '#d1fae5', 
+                    color: (selectedHouse as any).employeeFinishedBy ? '#64748b' : '#047857', 
+                    border: (selectedHouse as any).employeeFinishedBy ? '1px solid #e2e8f0' : '1px solid #a7f3d0'
+                  }}
+                  title={(selectedHouse as any).employeeFinishedBy ? `Finished at ${formatDateTime((selectedHouse as any).employeeFinishedAt)} - Click to Undo` : 'Mark as Finished'}
+                >
+                  <CheckCircle size={16} color={(selectedHouse as any).employeeFinishedBy ? "#10b981" : "currentColor"} /> 
+                  {(selectedHouse as any).employeeFinishedBy ? `Finished by ${(selectedHouse as any).employeeFinishedBy.split(' ')[0]}` : 'Mark as Finished'}
+                </button>
+                {canEdit && (
+                  <button onClick={() => handleOpenPayrollForm(selectedHouse.id)} disabled={isSaving} style={{ ...s.actionBtn, backgroundColor: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0' }}>
+                    <DollarSign size={16} /> Register Payment
+                  </button>
+                )}
+                {canEdit && (
+                  <button onClick={handleDuplicate} disabled={isSaving} style={{ ...s.actionBtn, backgroundColor: 'white', color: '#475569', border: '1px solid #e2e8f0' }}>
+                    <Copy size={16} /> Duplicate
+                  </button>
+                )}
+                <button onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }} style={{ ...s.actionBtn, backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe' }}>
+                  <ClipboardCheck size={16} /> Quality Check
+                </button>
+                <button style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', borderRadius: '4px', marginLeft: '4px' }} onClick={() => setIsDetailModalOpen(false)}>
+                  <X size={24} />
+                </button>
               </div>
             </header>
 
