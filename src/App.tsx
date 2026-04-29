@@ -7,6 +7,7 @@ import CalendarView from './views/CalendarView';
 import QualityCheckView from './views/QualityCheckView'; 
 import PayrollView from './views/PayrollView'; 
 import InvoicesView from './views/InvoicesView';
+import NoticeBoardView from './views/NoticeBoardView';
 import LoginView from './views/auth/LoginView';
 import RolesView from './views/admin/RolesView';
 import UsersView from './views/admin/UsersView';
@@ -18,7 +19,7 @@ import { auth, db } from './config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
-type TabOptions = 'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'qc_route' | 'payroll' | 'customers' | 'settings' | 'roles' | 'users';
+export type TabOptions = 'houses' | 'calendar' | 'invoices' | 'board' | 'done' | 'qc_report' | 'qc_route' | 'payroll' | 'customers' | 'settings' | 'roles' | 'users';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -82,7 +83,6 @@ export default function App() {
   }, [currentUser, roles]);
 
   const isSuperAdmin = isBypass || activeRole?.name === 'Administrator';
-
   const visibleProperties = properties; 
 
   const handleSettingsClick = () => {
@@ -137,6 +137,15 @@ export default function App() {
           />
         )}
 
+        {/* VISTA DEL MURO SOCIAL */}
+        {activeTab === 'board' && (
+          <NoticeBoardView 
+            onOpenMenu={toggleMenu} 
+            currentUser={currentUser} 
+            isSuperAdmin={isSuperAdmin}
+          />
+        )}
+
         {activeTab === 'calendar' && <CalendarView properties={visibleProperties as any} onOpenMenu={toggleMenu} />}
         
         {activeTab === 'payroll' && <PayrollView onOpenMenu={toggleMenu} />}
@@ -161,13 +170,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'roles' && (
-          <RolesView 
-            onOpenMenu={toggleMenu} 
-            roles={roles} 
-            setRoles={setRoles} 
-          />
-        )}
+        {activeTab === 'roles' && <RolesView onOpenMenu={toggleMenu} roles={roles} setRoles={setRoles} />}
         
         {activeTab === 'users' && <UsersView onOpenMenu={toggleMenu} roles={roles} />}
 

@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   Search, MapPin, Plus, X, Edit2, Trash2, 
-  Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, Home, ChevronDown, ClipboardCheck,
-  Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck, DollarSign, Filter, CheckCircle, Calendar
+  Activity, FileText, CalendarDays, Clock, User, Wrench, Hash, Flag, Users, StickyNote, PenTool, ChevronDown, ClipboardCheck,
+  Briefcase, ShieldCheck, AlertTriangle, Image as ImageIcon, Copy, CheckSquare, UserCheck, DollarSign, Filter, CheckCircle, Calendar, Calculator, Percent, PlayCircle, BarChart3, FileImage
 } from 'lucide-react';
 
 // Importamos Property como BaseProperty para poder extenderlo
-import type { Property as BaseProperty, Status, Team, Priority, Service, Customer, SystemUser, Role, PayrollRecord } from '../types/index';
+import type { Property as BaseProperty, Status, Team, Priority, Service, Customer, SystemUser, Role, PayrollRecord, Tax } from '../types/index';
 
 import { propertiesService } from '../services/propertiesService';
 import { settingsService } from '../services/settingsService';
@@ -14,22 +14,92 @@ import { customersService } from '../services/customersService';
 import { storageService } from '../services/storageService';
 import { payrollService } from '../services/payrollService';
 import { db } from '../config/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 
 // Extendemos el tipo localmente para que TypeScript no arroje errores
 type Property = BaseProperty & {
+  employeeStartedBy?: string | null;
+  employeeStartedAt?: string | null;
   employeeFinishedBy?: string | null;
   employeeFinishedAt?: string | null;
 };
+
+interface ServiceRecord {
+  id?: string;
+  propertyId: string;
+  serviceId: string;
+  quantity: number;
+  price: number;
+  subtotal: number;
+  applyTax: 'Yes' | 'No';
+  minusTax: 'Yes' | 'No';
+  taxPercentage: number;
+  taxAmount: number;
+  total: number;
+  notes: string;
+  createdAt?: string;
+}
 
 const collectionMap: Record<string, string> = {
   team: 'settings_teams',
   priority: 'settings_priorities',
   status: 'settings_statuses',
   service: 'settings_services',
+  tax: 'settings_tax'
 };
 
-// --- CUSTOM SELECTORS ---
+// --- SEARCHABLE SELECTOR (PARA EL CLIENTE) ---
+const SearchableSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const selected = options.find((o: any) => String(o[returnKey]) === String(value));
+  const displayValue = isOpen ? search : (selected ? selected.name : value || '');
+
+  const filteredOptions = options.filter((o: any) => o.name.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div tabIndex={0} onBlur={() => setTimeout(() => setIsOpen(false), 200)} style={{ position: 'relative', width: '100%', outline: 'none' }}>
+      <div style={{ backgroundColor: '#ffffff', padding: '0 14px 0 40px', border: '1px solid #e5e7eb', borderRadius: '6px', display: 'flex', alignItems: 'center', height: '42px', position: 'relative' }}>
+        <Icon size={16} style={{ position: 'absolute', left: '14px', color: '#6b7280' }} />
+        <input
+          style={{ border: 'none', outline: 'none', width: '100%', height: '100%', fontSize: '0.95rem', color: '#111827', backgroundColor: 'transparent' }}
+          placeholder={placeholder}
+          value={displayValue}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            if(!isOpen) setIsOpen(true);
+          }}
+          onClick={() => { setIsOpen(true); setSearch(''); }}
+        />
+        <ChevronDown size={16} color="#9ca3af" style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none', cursor: 'pointer' }} onClick={() => setIsOpen(!isOpen)} />
+      </div>
+      {isOpen && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, width: '100%', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 1000, maxHeight: '220px', overflowY: 'auto', marginTop: '4px' }}>
+          {filteredOptions.length === 0 ? <div style={{padding: '12px 14px', color: '#9ca3af', fontSize: '0.9rem'}}>No results found</div> : null}
+          {filteredOptions.map((o: any) => (
+            <div
+              key={o.id}
+              style={{ padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid #f9fafb', fontSize: '0.95rem', color: '#111827', fontWeight: 500 }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(o[returnKey] || o.id);
+                setIsOpen(false);
+                setSearch('');
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              {o.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- CUSTOM SELECTORS NORMALES ---
 const CustomSelect = ({ options, value, onChange, placeholder, icon: Icon, returnKey = 'id' }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const safeValue = String(value || '').toLowerCase().trim();
@@ -168,6 +238,8 @@ interface HousesViewProps {
   isSuperAdmin?: boolean;
 }
 
+type DetailTab = 'overview' | 'financials' | 'media';
+
 export default function HousesView({ onOpenMenu, properties, setProperties, onCheckHouse, currentUser, activeRole, isSuperAdmin }: HousesViewProps) {
   
   const [activeFilter, setActiveFilter] = useState('All');
@@ -179,11 +251,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedHouse, setSelectedHouse] = useState<Property | null>(null);
   const [selectedTeamView, setSelectedTeamView] = useState<Team | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('overview');
   
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [priorities, setPriorities] = useState<Priority[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [taxes, setTaxes] = useState<Tax[]>([]);
   const [customersList, setCustomersList] = useState<Customer[]>([]); 
   const [employees, setEmployees] = useState<any[]>([]); 
 
@@ -198,6 +272,19 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const [payrollForm, setPayrollForm] = useState<PayrollRecord>({
     propertyId: '', date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0
   });
+
+  // ESTADOS DE SERVICIOS FACTURADOS (Para detalle y formulario)
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [isServiceFromForm, setIsServiceFromForm] = useState(false);
+  const [houseServices, setHouseServices] = useState<ServiceRecord[]>([]);
+  const [formServices, setFormServices] = useState<ServiceRecord[]>([]);
+  const [servicesToDelete, setServicesToDelete] = useState<string[]>([]);
+
+  const defaultServiceForm: ServiceRecord = {
+    propertyId: '', serviceId: '', quantity: 1, price: 0, subtotal: 0,
+    applyTax: 'Yes', minusTax: 'No', taxPercentage: 0, taxAmount: 0, total: 0, notes: ''
+  };
+  const [serviceForm, setServiceForm] = useState<ServiceRecord>(defaultServiceForm);
 
   const [formData, setFormData] = useState<Property>({
     id: '', statusId: '', invoiceStatus: 'Pending', receiveDate: '', scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '',
@@ -218,12 +305,13 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        const [ propsData, statusData, teamData, prioData, servData, custData, usersData ] = await Promise.all([
+        const [ propsData, statusData, teamData, prioData, servData, taxData, custData, usersData ] = await Promise.all([
           propertiesService.getAll().catch(e => { console.error("Error Properties:", e); return []; }),
           settingsService.getAll(collectionMap.status).catch(e => { console.error("Error Status:", e); return []; }),
           settingsService.getAll(collectionMap.team).catch(e => { console.error("Error Teams:", e); return []; }),
           settingsService.getAll(collectionMap.priority).catch(e => { console.error("Error Priorities:", e); return []; }),
           settingsService.getAll(collectionMap.service).catch(e => { console.error("Error Services:", e); return []; }),
+          settingsService.getAll(collectionMap.tax).catch(e => { console.error("Error Taxes:", e); return []; }),
           customersService.getAll().catch(e => { console.error("Error Customers:", e); return []; }),
           getDocs(collection(db, 'system_users')).then(snap => snapshotToData(snap)).catch(() => []) 
         ]);
@@ -233,6 +321,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         if (teamData) setTeams(teamData as Team[]);
         if (prioData) setPriorities(prioData as Priority[]);
         if (servData) setServices(servData as Service[]);
+        if (taxData) setTaxes(taxData as Tax[]);
         if (custData) setCustomersList(custData);
         if (usersData) setEmployees(usersData);
 
@@ -244,6 +333,28 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     };
     fetchAllData();
   }, [setProperties]);
+
+  // CÁLCULOS EN TIEMPO REAL PARA EL FORMULARIO DE SERVICIOS
+  useEffect(() => {
+    if (!isServiceModalOpen) return;
+    
+    const qty = Number(serviceForm.quantity) || 0;
+    const price = Number(serviceForm.price) || 0;
+    const subtotal = qty * price;
+    const taxPct = Number(serviceForm.taxPercentage) || 0;
+    const taxAmount = (subtotal * taxPct) / 100;
+    
+    let total = subtotal;
+    if (serviceForm.applyTax === 'Yes') {
+      total = subtotal + taxAmount;
+    } else if (serviceForm.applyTax === 'No' && serviceForm.minusTax === 'Yes') {
+      total = subtotal - taxAmount;
+    }
+
+    if (subtotal !== serviceForm.subtotal || taxAmount !== serviceForm.taxAmount || total !== serviceForm.total) {
+      setServiceForm(prev => ({ ...prev, subtotal, taxAmount, total }));
+    }
+  }, [serviceForm.quantity, serviceForm.price, serviceForm.taxPercentage, serviceForm.applyTax, serviceForm.minusTax, isServiceModalOpen]);
 
   const snapshotToData = (snapshot: any) => snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
 
@@ -282,7 +393,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     const st = statuses.find(s => s.id === p.statusId || s.name === p.statusId);
     const isStatusInvoice = st?.name?.toLowerCase() === 'invoice' || p.statusId?.toLowerCase() === 'invoice';
     
-    // MAGIA: Si el estatus es invoice, la casa se desaparece de esta vista.
     if (isStatusInvoice) return false;
 
     let passStatus = true;
@@ -323,8 +433,58 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
+  const handleStartJob = async () => {
+    if (!selectedHouse) return;
+    
+    setIsSaving(true);
+    try {
+      const startedAt = new Date().toISOString();
+      const startedBy = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unknown';
+      
+      await propertiesService.update(selectedHouse.id, { 
+        employeeStartedAt: startedAt, 
+        employeeStartedBy: startedBy 
+      } as any);
+      
+      const updatedHouse = { ...selectedHouse, employeeStartedAt: startedAt, employeeStartedBy: startedBy };
+      setSelectedHouse(updatedHouse);
+      setProperties(properties.map(p => p.id === selectedHouse.id ? updatedHouse : p));
+    } catch (error) {
+      console.error("Error marking as started:", error);
+      alert("Failed to start job.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUndoStart = async () => {
+    if (!selectedHouse) return;
+    if (!window.confirm("Undo start job?")) return;
+    
+    setIsSaving(true);
+    try {
+      await propertiesService.update(selectedHouse.id, { 
+        employeeStartedAt: null, 
+        employeeStartedBy: null 
+      } as any);
+      
+      const updatedHouse = { ...selectedHouse, employeeStartedAt: undefined, employeeStartedBy: undefined };
+      setSelectedHouse(updatedHouse);
+      setProperties(properties.map(p => p.id === selectedHouse.id ? updatedHouse : p));
+    } catch (error) {
+      console.error("Error undoing start job:", error);
+      alert("Failed to undo start job.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleMarkAsFinished = async () => {
     if (!selectedHouse) return;
+    if (!(selectedHouse as any).employeeStartedBy) {
+      alert("Error: You must Start the job before marking it as Finished.");
+      return;
+    }
     if (!window.confirm("Are you sure you want to mark this job as finished?")) return;
     
     setIsSaving(true);
@@ -433,6 +593,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setFormData({ ...formData, assignedWorkers: newWorkersList });
   };
 
+  // --- PAYROLL FUNCTIONS ---
   const handleOpenPayrollForm = (houseId: string) => {
     if (!houseId) return alert("Must save the house first.");
     setPayrollForm({ propertyId: houseId, date: new Date().toISOString().split('T')[0], employeeId: '', baseAmount: 0, extraAmount: 0, extraNote: '', discountAmount: 0, discountNote: '', totalAmount: 0 });
@@ -474,13 +635,96 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     }
   };
 
-  const handleOpenForm = (house?: Property) => {
+  // --- BILLED SERVICES FUNCTIONS ---
+  const handleOpenServiceForm = (record?: ServiceRecord, fromForm = false) => {
+    setIsServiceFromForm(fromForm);
+    const propId = selectedHouse?.id || formData?.id || '';
+    
+    if (record) {
+      setServiceForm(record);
+    } else {
+      const defaultTax = taxes.length > 0 ? Number(taxes[0].percentage) : 0;
+      setServiceForm({ ...defaultServiceForm, propertyId: propId, taxPercentage: defaultTax });
+    }
+    setIsServiceModalOpen(true);
+  };
+
+  const handleSaveService = async () => {
+    if (!serviceForm.serviceId) return alert("Please select a Product/Service.");
+    if (serviceForm.price <= 0) return alert("Price must be greater than 0.");
+
+    const dataToSave = { ...serviceForm, createdAt: serviceForm.createdAt || new Date().toISOString() };
+
+    // SI ESTÁ GUARDANDO DESDE EL FORMULARIO (LOCAL STATE)
+    if (isServiceFromForm) {
+      const newService = { ...dataToSave, id: serviceForm.id || `temp-${Date.now()}` };
+      if (serviceForm.id) {
+        setFormServices(prev => prev.map(s => s.id === serviceForm.id ? newService : s));
+      } else {
+        setFormServices(prev => [newService, ...prev]);
+      }
+      setIsServiceModalOpen(false);
+      return;
+    }
+
+    // SI ESTÁ GUARDANDO DESDE EL DETALLE (DIRECTO A BASE DE DATOS)
+    setIsSaving(true);
+    try {
+      if (serviceForm.id) {
+        await updateDoc(doc(db, 'billing_services', serviceForm.id), dataToSave as any);
+        setHouseServices(houseServices.map(r => r.id === serviceForm.id ? dataToSave : r));
+      } else {
+        const docRef = await addDoc(collection(db, 'billing_services'), dataToSave);
+        setHouseServices([{ ...dataToSave, id: docRef.id }, ...houseServices]);
+      }
+      setIsServiceModalOpen(false);
+    } catch (error) {
+      console.error("Error saving service record:", error);
+      alert("Failed to save the record.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteService = async (id: string) => {
+    if (!window.confirm("Delete this service record completely?")) return;
+    setIsSaving(true);
+    try {
+      await deleteDoc(doc(db, 'billing_services', id));
+      setHouseServices(houseServices.filter(r => r.id !== id));
+    } catch (error) {
+      console.error("Error deleting service:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteServiceLocal = (id: string) => {
+    if (!window.confirm("Remove this service from the list?")) return;
+    if (!id.startsWith('temp-')) {
+      setServicesToDelete(prev => [...prev, id]);
+    }
+    setFormServices(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleOpenForm = async (house?: Property) => {
     setIsAssigningWorkerForm(false);
+    setServicesToDelete([]);
+    
     if (house) {
       setFormData(house);
+      try {
+        const q = query(collection(db, 'billing_services'), where('propertyId', '==', house.id));
+        const srvSnap = await getDocs(q);
+        setFormServices(srvSnap.docs.map(d => ({ id: d.id, ...d.data() } as ServiceRecord)));
+      } catch (error) {
+        console.error("Error fetching form services:", error);
+        setFormServices([]);
+      }
     } else {
       const defaultStatus = statuses.length > 0 ? statuses[0].id : '';
       setFormData({ id: '', statusId: defaultStatus, invoiceStatus: 'Pending', receiveDate: new Date().toISOString().split('T')[0], scheduleDate: '', client: '', note: '', address: '', employeeNote: '', serviceId: '', rooms: '1', bathrooms: '1', priorityId: '', teamId: '', timeIn: '', timeOut: '', beforePhotos: [], afterPhotos: [], assignedWorkers: [] });
+      setFormServices([]);
     }
     setSelectedHouse(house || null);
     setIsDetailModalOpen(false);
@@ -490,6 +734,9 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const handleDuplicate = () => {
     if (!selectedHouse) return;
     setFormData({ ...selectedHouse, id: '', beforePhotos: [], afterPhotos: [] });
+    // Duplicar también los servicios localmente
+    setFormServices(houseServices.map(s => ({ ...s, id: `temp-${Math.random().toString(36).substring(2, 9)}`, propertyId: '' })));
+    setServicesToDelete([]);
     setIsDetailModalOpen(false);
     setIsFormModalOpen(true);
   };
@@ -531,7 +778,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           city: 'TBD', 
           size: 'TBD' 
         };
-        workingId = await propertiesService.create(dataToCreate as any);
+        const docRef = await propertiesService.create(dataToCreate as any);
+        workingId = docRef;
         isNew = true;
       }
 
@@ -553,6 +801,23 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       };
 
       if(!isNew) await propertiesService.update(workingId, finalDataToUpdate as any);
+
+      // --- GUARDADO DE SERVICIOS ---
+      for (const srvId of servicesToDelete) {
+        await deleteDoc(doc(db, 'billing_services', srvId)).catch(e => console.error(e));
+      }
+      
+      for (const srv of formServices) {
+        const srvData = { ...srv, propertyId: workingId };
+        if (srv.id && !srv.id.startsWith('temp-')) {
+          const { id, ...updateData } = srvData;
+          await updateDoc(doc(db, 'billing_services', id as string), updateData as any).catch(e => console.error(e));
+        } else {
+          const { id, ...createData } = srvData;
+          await addDoc(collection(db, 'billing_services'), createData).catch(e => console.error(e));
+        }
+      }
+      // -----------------------------
 
       if (isNew) {
         const fullNewData = { ...finalDataToUpdate, id: workingId, description: `${formData.client} - ${formData.rooms} rooms`, city: 'TBD', size: 'TBD' };
@@ -586,6 +851,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         await Promise.all(relatedPayrolls.map(record => payrollService.delete(record.id as string)));
       }
 
+      // Also delete billed services
+      const relatedServices = houseServices;
+      if (relatedServices.length > 0) {
+        await Promise.all(relatedServices.map(record => deleteDoc(doc(db, 'billing_services', record.id as string))));
+      }
+
       await propertiesService.delete(selectedHouse.id);
       
       setProperties(properties.filter(p => p.id !== selectedHouse.id));
@@ -601,6 +872,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
   const handleOpenDetail = async (house: Property) => {
     setSelectedHouse(house);
     setIsAssigningWorker(false);
+    setActiveDetailTab('overview');
     setBeforeFiles([]);
     setAfterFiles([]);
     setBeforePhotoURLs(house.beforePhotos || []);
@@ -608,10 +880,15 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setIsDetailModalOpen(true);
 
     try {
-      const records = await payrollService.getByPropertyId(house.id);
-      setHousePayrollRecords(records);
+      const pRecords = await payrollService.getByPropertyId(house.id);
+      setHousePayrollRecords(pRecords);
+
+      const q = query(collection(db, 'billing_services'), where('propertyId', '==', house.id));
+      const srvSnap = await getDocs(q);
+      const srvRecords = srvSnap.docs.map(d => ({ id: d.id, ...d.data() } as ServiceRecord));
+      setHouseServices(srvRecords);
     } catch (error) {
-      console.error("Error fetching payroll records:", error);
+      console.error("Error fetching detail records:", error);
     }
   };
 
@@ -663,13 +940,17 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     setPayrollForm(prev => ({ ...prev, totalAmount: total }));
   }, [payrollForm.baseAmount, payrollForm.extraAmount, payrollForm.discountAmount]);
 
-  const invoiceOptions = [{ id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
+  const invoiceOptions = [{ id: 'Pre-Paid', name: 'Pre-Paid' }, { id: 'Needs Invoice', name: 'Needs Invoice' }, { id: 'Pending', name: 'Pending' }, { id: 'Paid', name: 'Paid' }];
   const roomOptions = [1, 2, 3, 4, 5].map(n => ({ id: String(n), name: String(n) }));
   const kpiIcons = [Briefcase, Clock, ShieldCheck, AlertTriangle];
 
-  const today = new Date();
-  const dateFormatted = today.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateFormatted = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const dateCapitalized = dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1);
+
+  // CÁLCULOS FINANCIEROS PARA EL DETALLE
+  const totalBilled = houseServices.reduce((sum, r) => sum + r.total, 0);
+  const totalPayroll = housePayrollRecords.reduce((sum, r) => sum + r.totalAmount, 0);
+  const netProfit = totalBilled - totalPayroll;
 
   const s = {
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 },
@@ -704,8 +985,12 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
     btnDangerLight: { backgroundColor: '#fef2f2', color: '#ef4444', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' } as React.CSSProperties,
     closeBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '4px', display: 'flex', borderRadius: '4px' },
 
-    detailBanner: { border: '1px solid #bfdbfe', borderRadius: '8px', padding: '24px', backgroundColor: '#eff6ff', display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' } as React.CSSProperties,
-    detailItem: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } as React.CSSProperties,
+    infoCard: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' as const },
+    infoHeader: { backgroundColor: '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontWeight: 700, color: '#334155', fontSize: '0.8rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em' },
+    infoRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' },
+    infoLabel: { color: '#64748b', fontSize: '0.85rem', fontWeight: 600 },
+    infoValue: { color: '#1e293b', fontSize: '0.9rem', fontWeight: 600, textAlign: 'right' as const, display: 'flex', alignItems: 'center', gap: '6px' },
+
     detailLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', fontWeight: 600 } as React.CSSProperties,
     detailValue: { fontSize: '1.05rem', color: '#111827', fontWeight: 500, marginTop: '4px', whiteSpace: 'pre-wrap' } as React.CSSProperties,
     noteBoxGray: { backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', width: '100%' } as React.CSSProperties,
@@ -721,6 +1006,21 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
     dashGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '24px' } as React.CSSProperties,
     mainColumns: { display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'flex-start' } as React.CSSProperties,
+
+    segmentContainer: { display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '8px', gap: '4px' },
+    segmentBtn: (active: boolean, type: 'yes' | 'no') => ({ 
+      flex: 1, height: '32px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s', border: 'none',
+      backgroundColor: active ? 'white' : 'transparent', 
+      boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', 
+      color: active ? (type === 'yes' ? '#10b981' : '#ef4444') : '#64748b'
+    }),
+    
+    // Novedad: Pestañas para el modal de detalle
+    detailTab: (active: boolean) => ({ 
+      padding: '10px 4px', border: 'none', borderBottom: active ? '3px solid #3b82f6' : '3px solid transparent', 
+      color: active ? '#1e40af' : '#64748b', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', 
+      background: 'none', transition: 'all 0.2s', marginBottom: '-1px' 
+    }),
   };
 
   return (
@@ -728,11 +1028,16 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       <style>{`
         .modal-overlay-centered { position: fixed; inset: 0; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px; box-sizing: border-box; }
         .modal-70 { background-color: #ffffff; width: 100%; max-width: 1000px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); display: flex; flex-direction: column; max-height: 90vh; }
-        @media (min-width: 769px) { .modal-70 { width: 70%; } }
+        .modal-90 { background-color: #ffffff; width: 100%; max-width: 1300px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column; max-height: 95vh; }
+        
+        @media (min-width: 769px) { 
+          .modal-70 { width: 70%; } 
+          .modal-90 { width: 90%; }
+        }
+        
         .grid-3-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
         .col-span-full { grid-column: 1 / -1; }
         
-        /* Responsive View Headers */
         .view-header-title-group {
           display: flex;
           align-items: center;
@@ -769,10 +1074,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         .tabs-container {
           display: flex;
           gap: 8px;
-          overflow-x: auto;
-          padding-bottom: 4px;
+          flex-wrap: wrap;
           flex: 1;
-          min-width: 250px;
         }
         .property-select-container {
           display: flex;
@@ -780,6 +1083,23 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           gap: 8px;
           white-space: nowrap;
           position: relative;
+        }
+
+        .left-col {
+          flex: 1 1 0%;
+          min-width: 0;
+        }
+        .right-col {
+          flex: 0 0 280px;
+          width: 280px;
+        }
+
+        @media (max-width: 1024px) {
+          .left-col, .right-col {
+            flex: 1 1 100%;
+            width: 100%;
+            max-width: 100%;
+          }
         }
 
         @media (max-width: 768px) {
@@ -796,7 +1116,6 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
           .responsive-table td::before { content: attr(data-label); font-weight: 700; color: #6b7280; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
           .mobile-client-cell { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
           
-          /* Apilamos los filtros en móvil */
           .filters-section {
             flex-direction: column;
             align-items: stretch;
@@ -861,7 +1180,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       <div className="main-columns" style={s.mainColumns}>
 
         {/* LEFT COLUMN: DAILY JOBS */}
-        <div className="left-col" style={{ flex: '1 1 600px' }}>
+        <div className="left-col">
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', overflow: 'visible' }}>
             
             <div style={s.tableHeader}>
@@ -914,6 +1233,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                           onChange={e => setInvoiceFilter(e.target.value)}
                         >
                           <option value="All">All Invoices</option>
+                          <option value="Pre-Paid">Pre-Paid</option>
                           <option value="Pending">Pending</option>
                           <option value="Paid">Paid</option>
                           <option value="Needs Invoice">Needs Invoice</option>
@@ -926,8 +1246,8 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
               </div>
             </div>
 
-            <div style={{ overflow: 'visible', padding: '10px 20px 40px 20px', minHeight: '300px' }}>
-              <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '100%' }}>
+            <div style={{ overflow: 'visible', padding: '10px 20px 40px 20px' }}>
+              <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
                     <th style={{...s.th, width: '100px'}}>Actions</th>
@@ -980,7 +1300,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
         </div>
 
         {/* RIGHT COLUMN: ACTIVE TEAMS */}
-        <div className="right-col" style={{ flex: '1 1 300px', maxWidth: '400px' }}>
+        <div className="right-col">
           <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', padding: '20px' }}>
             <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', color: '#111827', fontWeight: 700 }}>Active Teams</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1035,7 +1355,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
 
                 <div>
                   <label style={s.label}>Client <span style={{ color: '#3b82f6' }}>*</span></label>
-                  <CustomSelect options={customersList} value={formData.client} onChange={handleCustomerSelect} placeholder="Select Client..." icon={User} returnKey="name" />
+                  <SearchableSelect options={customersList} value={formData.client} onChange={handleCustomerSelect} placeholder="Type to search Client..." icon={User} returnKey="name" />
                 </div>
                 <div>
                   <label style={s.label}>Address <span style={{ color: '#3b82f6' }}>*</span></label>
@@ -1172,6 +1492,67 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </div>
                 </div>
 
+                {/* TABLA DE SERVICIOS FACTURADOS DENTRO DEL FORMULARIO */}
+                <div className="col-span-full" style={{ marginTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <h4 style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 700, margin: 0, textTransform: 'uppercase' }}>Billed Services</h4>
+                    <button type="button" onClick={() => handleOpenServiceForm(undefined, true)} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Plus size={12} /> Add Service
+                    </button>
+                  </div>
+
+                  <div style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                      <thead>
+                        <tr>
+                          <th style={{...s.th, backgroundColor: '#f8fafc'}}>Service</th>
+                          <th style={{...s.th, backgroundColor: '#f8fafc', textAlign: 'center'}}>Qty</th>
+                          <th style={{...s.th, backgroundColor: '#f8fafc', textAlign: 'right'}}>Price</th>
+                          <th style={{...s.th, backgroundColor: '#f8fafc', textAlign: 'right'}}>Tax</th>
+                          <th style={{...s.th, backgroundColor: '#f8fafc', textAlign: 'right'}}>Total</th>
+                          <th style={{...s.th, backgroundColor: '#f8fafc', textAlign: 'right'}}>Act</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {formServices.length === 0 ? (
+                          <tr><td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>No services added yet.</td></tr>
+                        ) : (
+                          formServices.map(record => {
+                            const srv = services.find(c => c.id === record.serviceId);
+                            return (
+                              <tr key={record.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{...s.td, padding: '12px 20px', fontWeight: 600}}>{srv ? srv.name : 'Unknown'}</td>
+                                <td style={{...s.td, padding: '12px 20px', textAlign: 'center'}}>{record.quantity}</td>
+                                <td style={{...s.td, padding: '12px 20px', textAlign: 'right'}}>${Number(record.price).toFixed(2)}</td>
+                                <td style={{...s.td, padding: '12px 20px', textAlign: 'right', color: record.taxAmount > 0 ? '#ef4444' : '#64748b'}}>
+                                  {record.taxAmount > 0 ? `+$${record.taxAmount.toFixed(2)}` : record.minusTax === 'Yes' ? `-$${Math.abs(record.taxAmount).toFixed(2)}` : '$0.00'}
+                                </td>
+                                <td style={{...s.td, padding: '12px 20px', textAlign: 'right', fontWeight: 700, color: '#1e293b'}}>${Number(record.total).toFixed(2)}</td>
+                                <td style={{...s.td, padding: '12px 20px', textAlign: 'right'}}>
+                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                    <button type="button" onClick={() => handleOpenServiceForm(record, true)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '2px' }}><Edit2 size={14} /></button>
+                                    <button type="button" onClick={() => handleDeleteServiceLocal(record.id as string)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}><Trash2 size={14} /></button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                      {formServices.length > 0 && (
+                        <tfoot>
+                          <tr>
+                            <td colSpan={4} style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: '0.85rem', textTransform: 'uppercase' }}>House Total:</td>
+                            <td colSpan={2} style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 800, color: '#047857', fontSize: '1.1rem', backgroundColor: '#ecfdf5' }}>
+                              ${formServices.reduce((sum, r) => sum + r.total, 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+
                 <div className="col-span-full">
                   <label style={s.label}>Note</label>
                   <div style={{ ...s.inputWrapper, alignItems: 'flex-start' }}>
@@ -1204,15 +1585,36 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
       {/* --- DETAIL MODAL --- */}
       {isDetailModalOpen && selectedHouse && (
         <div className="modal-overlay-centered" onClick={() => setIsDetailModalOpen(false)}>
-          <div className="modal-70" onClick={e => e.stopPropagation()}>
+          <div className="modal-90" onClick={e => e.stopPropagation()}>
             <header style={s.header}>
-              <h3 style={s.title}>Property Overview</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <h3 style={s.title}>{selectedHouse.client}</h3>
+                {(selectedHouse as any).employeeFinishedBy && (
+                  <span style={{ backgroundColor: '#d1fae5', color: '#047857', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <CheckCircle size={14} /> 
+                    Finished by {(selectedHouse as any).employeeFinishedBy.split(' ')[0]} ({formatDateTime((selectedHouse as any).employeeFinishedAt)})
+                  </span>
+                )}
+              </div>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <button 
                   onClick={handleGoogleCalendarSync} 
                   style={{ ...s.actionBtn, backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74' }}
                 >
-                  <Calendar size={16} /> Sync Calendar
+                  <Calendar size={16} /> Sync
+                </button>
+                <button 
+                  onClick={(selectedHouse as any).employeeStartedBy ? handleUndoStart : handleStartJob} 
+                  disabled={isSaving || (selectedHouse as any).employeeFinishedBy} 
+                  style={{ 
+                    ...s.actionBtn,
+                    backgroundColor: (selectedHouse as any).employeeStartedBy ? '#f8fafc' : '#eff6ff', 
+                    color: (selectedHouse as any).employeeStartedBy ? '#64748b' : '#3b82f6', 
+                    border: (selectedHouse as any).employeeStartedBy ? '1px solid #e2e8f0' : '1px solid #bfdbfe'
+                  }}
+                >
+                  <PlayCircle size={16} color={(selectedHouse as any).employeeStartedBy ? "#64748b" : "currentColor"} /> 
+                  {(selectedHouse as any).employeeStartedBy ? 'Undo Start' : 'Start Job'}
                 </button>
                 <button 
                   onClick={(selectedHouse as any).employeeFinishedBy ? handleUndoFinished : handleMarkAsFinished} 
@@ -1223,14 +1625,15 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     color: (selectedHouse as any).employeeFinishedBy ? '#64748b' : '#047857', 
                     border: (selectedHouse as any).employeeFinishedBy ? '1px solid #e2e8f0' : '1px solid #a7f3d0'
                   }}
-                  title={(selectedHouse as any).employeeFinishedBy ? `Finished at ${formatDateTime((selectedHouse as any).employeeFinishedAt)} - Click to Undo` : 'Mark as Finished'}
                 >
-                  <CheckCircle size={16} color={(selectedHouse as any).employeeFinishedBy ? "#10b981" : "currentColor"} /> 
-                  {(selectedHouse as any).employeeFinishedBy ? `Finished by ${(selectedHouse as any).employeeFinishedBy.split(' ')[0]}` : 'Mark as Finished'}
+                  <span title={(selectedHouse as any).employeeFinishedBy ? `Finished at ${formatDateTime((selectedHouse as any).employeeFinishedAt)} - Click to Undo` : 'Mark as Finished'}>
+                    <CheckCircle size={16} color={(selectedHouse as any).employeeFinishedBy ? "#10b981" : "currentColor"} /> 
+                  </span>
+                  {(selectedHouse as any).employeeFinishedBy ? 'Undo Finished' : 'Mark Finished'}
                 </button>
                 {canEdit && (
                   <button onClick={() => handleOpenPayrollForm(selectedHouse.id)} disabled={isSaving} style={{ ...s.actionBtn, backgroundColor: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0' }}>
-                    <DollarSign size={16} /> Register Payment
+                    <DollarSign size={16} /> Pay
                   </button>
                 )}
                 {canEdit && (
@@ -1239,7 +1642,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                   </button>
                 )}
                 <button onClick={() => { setIsDetailModalOpen(false); onCheckHouse(selectedHouse); }} style={{ ...s.actionBtn, backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe' }}>
-                  <ClipboardCheck size={16} /> Quality Check
+                  <ClipboardCheck size={16} /> Q. Check
                 </button>
                 <button style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', borderRadius: '4px', marginLeft: '4px' }} onClick={() => setIsDetailModalOpen(false)}>
                   <X size={24} />
@@ -1248,167 +1651,331 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
             </header>
 
             <div style={s.body}>
-              <div style={s.detailBanner}>
-                <div style={s.detailItem}>
-                  <span style={{ ...s.detailLabel, color: '#1e40af' }}><Home size={14} /> PROPERTY ADDRESS</span>
-                  <span style={{ fontSize: '1.25rem', color: '#1e3a8a', fontWeight: 600, marginTop: '4px' }}>{selectedHouse.address}</span>
-                </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '1rem', fontWeight: 500, paddingBottom: '16px' }}>
+                <MapPin size={18} color="#3b82f6" /> {selectedHouse.address}
               </div>
 
-              <div className="grid-3-cols">
+              {/* TABS NAVIGATION */}
+              <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '24px', gap: '24px', overflowX: 'auto' }}>
+                <button style={s.detailTab(activeDetailTab === 'overview')} onClick={() => setActiveDetailTab('overview')}><Briefcase size={14} style={{display:'inline', marginBottom:'-2px', marginRight:'4px'}}/> Overview & Log</button>
+                <button style={s.detailTab(activeDetailTab === 'financials')} onClick={() => setActiveDetailTab('financials')}><BarChart3 size={14} style={{display:'inline', marginBottom:'-2px', marginRight:'4px'}}/> Financials & Billing</button>
+                <button style={s.detailTab(activeDetailTab === 'media')} onClick={() => setActiveDetailTab('media')}><FileImage size={14} style={{display:'inline', marginBottom:'-2px', marginRight:'4px'}}/> Notes & Photos</button>
+              </div>
 
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><Activity size={14} /> STATUS</span>
-                  <div style={{ marginTop: '4px' }}>
-                    <StatusPillSelector currentStatusId={selectedHouse.statusId} statuses={statuses} onChange={(newId: string) => handleQuickStatusChange(selectedHouse.id, newId)} disabled={isSaving || !canEdit} />
+              {/* TAB 1: OVERVIEW & LOG */}
+              {activeDetailTab === 'overview' && (
+                <div className="fade-in">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+                    {/* TABLE CARD 1: SCHEDULE */}
+                    <div style={s.infoCard}>
+                      <div style={s.infoHeader}><CalendarDays size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'6px'}}/> Schedule & Timing</div>
+                      <div style={s.infoRow}>
+                        <span style={s.infoLabel}>Receive Date</span>
+                        <span style={s.infoValue}>{selectedHouse.receiveDate || '-'}</span>
+                      </div>
+                      <div style={s.infoRow}>
+                        <span style={s.infoLabel}>Schedule Date</span>
+                        <span style={s.infoValue}>{selectedHouse.scheduleDate || '-'}</span>
+                      </div>
+                      <div style={s.infoRow}>
+                        <span style={s.infoLabel}>Time In</span>
+                        <span style={s.infoValue}><Clock size={12} color="#94a3b8"/> {selectedHouse.timeIn || '-'}</span>
+                      </div>
+                      <div style={{...s.infoRow, borderBottom: 'none'}}>
+                        <span style={s.infoLabel}>Time Out</span>
+                        <span style={s.infoValue}><Clock size={12} color="#94a3b8"/> {selectedHouse.timeOut || '-'}</span>
+                      </div>
+                    </div>
+
+                    {/* TABLE CARD 2: SPECS */}
+                    <div style={s.infoCard}>
+                      <div style={s.infoHeader}><Wrench size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'6px'}}/> Job Specifications</div>
+                      <div style={s.infoRow}>
+                        <span style={s.infoLabel}>Service</span>
+                        <span style={s.infoValue}>{getRelationName(services, selectedHouse.serviceId)}</span>
+                      </div>
+                      <div style={s.infoRow}>
+                        <span style={s.infoLabel}>Priority</span>
+                        <span style={s.infoValue}>
+                          {getRelationColor(priorities, selectedHouse.priorityId) && <span style={{ backgroundColor: getRelationColor(priorities, selectedHouse.priorityId), width: '10px', height: '10px', borderRadius: '50%', display: 'inline-block' }}></span>}
+                          {getRelationName(priorities, selectedHouse.priorityId)}
+                        </span>
+                      </div>
+                      <div style={s.infoRow}>
+                        <span style={s.infoLabel}>Rooms</span>
+                        <span style={s.infoValue}><Hash size={12} color="#94a3b8"/> {selectedHouse.rooms || '-'}</span>
+                      </div>
+                      <div style={{...s.infoRow, borderBottom: 'none'}}>
+                        <span style={s.infoLabel}>Bathrooms</span>
+                        <span style={s.infoValue}><Hash size={12} color="#94a3b8"/> {selectedHouse.bathrooms || '-'}</span>
+                      </div>
+                    </div>
+
+                    {/* TABLE CARD 3: STATUS & TEAM */}
+                    <div style={s.infoCard}>
+                      <div style={s.infoHeader}><Activity size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'6px'}}/> Status & Assignment</div>
+                      <div style={s.infoRow}>
+                        <span style={s.infoLabel}>Job Status</span>
+                        <div style={{textAlign: 'right'}}><StatusPillSelector currentStatusId={selectedHouse.statusId} statuses={statuses} onChange={(newId: string) => handleQuickStatusChange(selectedHouse.id, newId)} disabled={isSaving || !canEdit} /></div>
+                      </div>
+                      <div style={s.infoRow}>
+                        <span style={s.infoLabel}>Invoice Status</span>
+                        <span style={{...s.infoValue, color: '#475569', backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem'}}>{selectedHouse.invoiceStatus || '-'}</span>
+                      </div>
+                      <div style={{...s.infoRow, borderBottom: 'none'}}>
+                        <span style={s.infoLabel}>Assigned Team</span>
+                        <span style={s.infoValue}>
+                          {getRelationColor(teams, selectedHouse.teamId) && <span style={{ backgroundColor: getRelationColor(teams, selectedHouse.teamId), width: '10px', height: '10px', borderRadius: '50%', display: 'inline-block' }}></span>}
+                          {getRelationName(teams, selectedHouse.teamId, 'Unassigned')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                    {/* ASSIGNED WORKERS FULL WIDTH */}
+                    <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <span style={s.detailLabel}><User size={14} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}}/> SPECIFIC ASSIGNED WORKERS</span>
+                        
+                        {canEdit && (
+                          <div style={{ position: 'relative' }}>
+                            <button 
+                              onClick={() => setIsAssigningWorker(!isAssigningWorker)} 
+                              disabled={isSaving}
+                              style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              {isAssigningWorker ? 'Close' : '+ Assign / Remove'}
+                            </button>
+
+                            {isAssigningWorker && (
+                              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', width: '250px', zIndex: 10, maxHeight: '200px', overflowY: 'auto' }}>
+                                <div style={{ padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>ALL EMPLOYEES</div>
+                                {employees.map(emp => {
+                                  const isAssigned = (selectedHouse.assignedWorkers || []).includes(emp.id);
+                                  return (
+                                    <div 
+                                      key={emp.id} 
+                                      onClick={() => toggleWorkerAssignmentDetail(emp.id)}
+                                      style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', backgroundColor: isAssigned ? '#eff6ff' : 'transparent' }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : '#f8fafc'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : 'transparent'}
+                                    >
+                                      <span style={{ fontSize: '0.85rem', fontWeight: isAssigned ? 600 : 500, color: isAssigned ? '#1e40af' : '#334155' }}>
+                                        {emp.firstName} {emp.lastName}
+                                      </span>
+                                      {isAssigned && <CheckSquare size={14} color="#3b82f6" />}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {!(selectedHouse.assignedWorkers && selectedHouse.assignedWorkers.length > 0) ? (
+                          <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic' }}>No specific workers assigned to this job.</span>
+                        ) : (
+                          selectedHouse.assignedWorkers.map(workerId => {
+                            const emp = employees.find(e => e.id === workerId);
+                            if (!emp) return null;
+                            return (
+                              <div key={workerId} style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', padding: '6px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <User size={12} color="#64748b" />
+                                {emp.firstName} {emp.lastName}
+                                {canEdit && (
+                                  <button onClick={() => toggleWorkerAssignmentDetail(workerId)} style={{ background: 'none', border: 'none', padding: 0, margin: 0, marginLeft: '4px', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center' }}><X size={14}/></button>
+                                )}
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* WORK LOG (NEW) */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <span style={s.detailLabel}><Activity size={14} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}}/> Work Log (Entry / Exit)</span>
+                      </div>
+                      <div style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th style={{...s.th, backgroundColor: '#f8fafc', padding: '10px 16px'}}>Event</th>
+                              <th style={{...s.th, backgroundColor: '#f8fafc', padding: '10px 16px'}}>Employee</th>
+                              <th style={{...s.th, backgroundColor: '#f8fafc', padding: '10px 16px', textAlign: 'right'}}>Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(!(selectedHouse as any).employeeStartedBy && !(selectedHouse as any).employeeFinishedBy) && (
+                              <tr><td colSpan={3} style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>No activity logged yet.</td></tr>
+                            )}
+                            {(selectedHouse as any).employeeStartedBy && (
+                              <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{...s.td, padding: '12px 16px', fontWeight: 600, color: '#3b82f6'}}>Job Started</td>
+                                <td style={{...s.td, padding: '12px 16px'}}>{(selectedHouse as any).employeeStartedBy.split(' ')[0]}</td>
+                                <td style={{...s.td, padding: '12px 16px', color: '#64748b', fontSize: '0.8rem', textAlign: 'right'}}>{formatDateTime((selectedHouse as any).employeeStartedAt)}</td>
+                              </tr>
+                            )}
+                            {(selectedHouse as any).employeeFinishedBy && (
+                              <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{...s.td, padding: '12px 16px', fontWeight: 600, color: '#10b981'}}>Job Finished</td>
+                                <td style={{...s.td, padding: '12px 16px'}}>{(selectedHouse as any).employeeFinishedBy.split(' ')[0]}</td>
+                                <td style={{...s.td, padding: '12px 16px', color: '#64748b', fontSize: '0.8rem', textAlign: 'right'}}>{formatDateTime((selectedHouse as any).employeeFinishedAt)}</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><FileText size={14} /> INVOICE STATUS</span>
-                  <span style={s.detailValue}>{selectedHouse.invoiceStatus || '-'}</span>
-                </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><User size={14} /> CLIENT</span>
-                  <span style={s.detailValue}>{selectedHouse.client || '-'}</span>
-                </div>
+              )}
 
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><CalendarDays size={14} /> RECEIVE DATE</span>
-                  <span style={s.detailValue}>{selectedHouse.receiveDate || '-'}</span>
-                </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><CalendarDays size={14} /> SCHEDULE DATE</span>
-                  <span style={s.detailValue}>{selectedHouse.scheduleDate || '-'}</span>
-                </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><Wrench size={14} /> SERVICE</span>
-                  <span style={s.detailValue}>{getRelationName(services, selectedHouse.serviceId)}</span>
-                </div>
-
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><Clock size={14} /> TIME IN</span>
-                  <span style={s.detailValue}>{selectedHouse.timeIn || '-'}</span>
-                </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><Clock size={14} /> TIME OUT</span>
-                  <span style={s.detailValue}>{selectedHouse.timeOut || '-'}</span>
-                </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><Flag size={14} /> PRIORITY</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    {getRelationColor(priorities, selectedHouse.priorityId) && <span style={{ backgroundColor: getRelationColor(priorities, selectedHouse.priorityId), width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-                    <span style={s.detailValue}>{getRelationName(priorities, selectedHouse.priorityId)}</span>
+              {/* TAB 2: FINANCIALS & BILLING */}
+              {activeDetailTab === 'financials' && (
+                <div className="fade-in">
+                  
+                  {/* FINANCIAL OVERVIEW (PROFIT) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                    <div style={{ backgroundColor: '#eff6ff', padding: '16px', borderRadius: '8px', border: '1px solid #bfdbfe', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#1e40af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Revenue (Billed)</div>
+                      <div style={{ fontSize: '1.5rem', color: '#1e3a8a', fontWeight: 800, marginTop: '4px' }}>${totalBilled.toFixed(2)}</div>
+                    </div>
+                    <div style={{ backgroundColor: '#fef2f2', padding: '16px', borderRadius: '8px', border: '1px solid #fecaca', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#991b1b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Payroll Cost</div>
+                      <div style={{ fontSize: '1.5rem', color: '#7f1d1d', fontWeight: 800, marginTop: '4px' }}>${totalPayroll.toFixed(2)}</div>
+                    </div>
+                    <div style={{ backgroundColor: netProfit >= 0 ? '#ecfdf5' : '#fef2f2', padding: '16px', borderRadius: '8px', border: `1px solid ${netProfit >= 0 ? '#a7f3d0' : '#fecaca'}`, textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <div style={{ fontSize: '0.8rem', color: netProfit >= 0 ? '#065f46' : '#991b1b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Net Profit</div>
+                      <div style={{ fontSize: '1.5rem', color: netProfit >= 0 ? '#047857' : '#7f1d1d', fontWeight: 800, marginTop: '4px' }}>${netProfit.toFixed(2)}</div>
+                    </div>
                   </div>
-                </div>
 
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><Hash size={14} /> ROOMS</span>
-                  <span style={s.detailValue}>{selectedHouse.rooms || '-'}</span>
-                </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><Hash size={14} /> BATHROOMS</span>
-                  <span style={s.detailValue}>{selectedHouse.bathrooms || '-'}</span>
-                </div>
-                <div style={s.detailItem}>
-                  <span style={s.detailLabel}><Users size={14} /> TEAM</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                    {getRelationColor(teams, selectedHouse.teamId) && <span style={{ backgroundColor: getRelationColor(teams, selectedHouse.teamId), width: '12px', height: '12px', borderRadius: '50%', display: 'inline-block' }}></span>}
-                    <span style={s.detailValue}>{getRelationName(teams, selectedHouse.teamId, 'Unassigned')}</span>
-                  </div>
-                </div>
-
-                <div className="col-span-full" style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={s.detailLabel}><User size={14} style={{display: 'inline', verticalAlign: 'middle', marginRight: '4px'}}/> ASSIGNED WORKERS</span>
-                    
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px' }}>
+                    {/* TABLA DE SERVICIOS FACTURADOS */}
                     {canEdit && (
-                      <div style={{ position: 'relative' }}>
-                        <button 
-                          onClick={() => setIsAssigningWorker(!isAssigningWorker)} 
-                          disabled={isSaving}
-                          style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          {isAssigningWorker ? 'Close' : '+ Assign / Remove'}
-                        </button>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <h4 style={{ fontSize: '0.9rem', color: '#334155', fontWeight: 700, margin: 0, textTransform: 'uppercase' }}>Billed Services</h4>
+                          <button onClick={() => handleOpenServiceForm()} style={{ background: '#e0f2fe', color: '#2563eb', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Plus size={12} /> Add Service
+                          </button>
+                        </div>
 
-                        {isAssigningWorker && (
-                          <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', width: '250px', zIndex: 10, maxHeight: '200px', overflowY: 'auto' }}>
-                            <div style={{ padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>ALL EMPLOYEES</div>
-                            {employees.map(emp => {
-                              const isAssigned = (selectedHouse.assignedWorkers || []).includes(emp.id);
+                        <div style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '400px' }}>
+                            <thead>
+                              <tr>
+                                <th style={{...s.th, backgroundColor: '#f8fafc'}}>Service</th>
+                                <th style={{...s.th, backgroundColor: '#f8fafc', textAlign: 'center'}}>Qty</th>
+                                <th style={{...s.th, backgroundColor: '#f8fafc', textAlign: 'right'}}>Total</th>
+                                <th style={{...s.th, backgroundColor: '#f8fafc', textAlign: 'right'}}>Act</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {houseServices.length === 0 ? (
+                                <tr><td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>No services added yet.</td></tr>
+                              ) : (
+                                houseServices.map(record => {
+                                  const srv = services.find(c => c.id === record.serviceId);
+                                  return (
+                                    <tr key={record.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                      <td style={{...s.td, padding: '12px 20px', fontWeight: 600}}>
+                                        {srv ? srv.name : 'Unknown'}
+                                        <div style={{fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px', fontWeight: 400}}>Price: ${Number(record.price).toFixed(2)} | Tax: {record.taxAmount > 0 ? `+$${record.taxAmount.toFixed(2)}` : record.minusTax === 'Yes' ? `-$${Math.abs(record.taxAmount).toFixed(2)}` : '$0.00'}</div>
+                                      </td>
+                                      <td style={{...s.td, padding: '12px 20px', textAlign: 'center'}}>{record.quantity}</td>
+                                      <td style={{...s.td, padding: '12px 20px', textAlign: 'right', fontWeight: 700, color: '#1e293b'}}>${Number(record.total).toFixed(2)}</td>
+                                      <td style={{...s.td, padding: '12px 20px', textAlign: 'right'}}>
+                                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                          <button onClick={() => handleOpenServiceForm(record)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '2px' }}><Edit2 size={14} /></button>
+                                          <button onClick={() => handleDeleteService(record.id as string)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '2px' }}><Trash2 size={14} /></button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                            {houseServices.length > 0 && (
+                              <tfoot>
+                                <tr>
+                                  <td colSpan={2} style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: '0.85rem', textTransform: 'uppercase' }}>House Total:</td>
+                                  <td colSpan={2} style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 800, color: '#047857', fontSize: '1.1rem', backgroundColor: '#ecfdf5' }}>
+                                    ${totalBilled.toFixed(2)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* PAYMENTS */}
+                    {canEdit && (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <h4 style={{ fontSize: '0.9rem', color: '#334155', fontWeight: 700, margin: 0, textTransform: 'uppercase' }}>Registered Payments</h4>
+                          <button onClick={() => handleOpenPayrollForm(selectedHouse.id)} style={{ background: '#ecfdf5', color: '#10b981', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Plus size={12} /> Add Payment
+                          </button>
+                        </div>
+                        {housePayrollRecords.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {housePayrollRecords.map(record => {
+                              const emp = employees.find(e => e.id === record.employeeId);
                               return (
-                                <div 
-                                  key={emp.id} 
-                                  onClick={() => toggleWorkerAssignmentDetail(emp.id)}
-                                  style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', backgroundColor: isAssigned ? '#eff6ff' : 'transparent' }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : '#f8fafc'}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isAssigned ? '#eff6ff' : 'transparent'}
-                                >
-                                  <span style={{ fontSize: '0.85rem', fontWeight: isAssigned ? 600 : 500, color: isAssigned ? '#1e40af' : '#334155' }}>
-                                    {emp.firstName} {emp.lastName}
-                                  </span>
-                                  {isAssigned && <CheckSquare size={14} color="#3b82f6" />}
+                                <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                                  <div>
+                                    <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.95rem' }}>{emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown'}</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Date: {record.date}</div>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    <div style={{ textAlign: 'right' }}>
+                                      <div style={{ fontWeight: 700, color: '#10b981', fontSize: '1.1rem' }}>${record.totalAmount.toFixed(2)}</div>
+                                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: record.status === 'Paid' ? '#10b981' : '#f59e0b' }}>
+                                        {record.status || 'Pending'}
+                                      </div>
+                                    </div>
+                                    <button onClick={() => handleDeletePayroll(record.id as string)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
                                 </div>
-                              )
+                              );
                             })}
                           </div>
+                        ) : (
+                          <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', color: '#94a3b8', fontSize: '0.85rem' }}>No payments registered.</div>
                         )}
                       </div>
                     )}
                   </div>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {!(selectedHouse.assignedWorkers && selectedHouse.assignedWorkers.length > 0) ? (
-                      <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic' }}>No workers assigned specifically for this job.</span>
-                    ) : (
-                      selectedHouse.assignedWorkers.map(workerId => {
-                        const emp = employees.find(e => e.id === workerId);
-                        if (!emp) return null;
-                        return (
-                          <div key={workerId} style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', padding: '6px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <User size={12} color="#64748b" />
-                            {emp.firstName} {emp.lastName}
-                            {canEdit && (
-                              <button onClick={() => toggleWorkerAssignmentDetail(workerId)} style={{ background: 'none', border: 'none', padding: 0, margin: 0, marginLeft: '4px', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center' }}><X size={14}/></button>
-                            )}
-                          </div>
-                        )
-                      })
-                    )}
-                  </div>
                 </div>
+              )}
 
-                {canEdit && housePayrollRecords.length > 0 && (
-                  <div className="col-span-full" style={{ marginTop: '8px' }}>
-                    <h4 style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 700, marginBottom: '8px', textTransform: 'uppercase' }}>Registered Payments</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {housePayrollRecords.map(record => {
-                        const emp = employees.find(e => e.id === record.employeeId);
-                        return (
-                          <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                            <div>
-                              <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.95rem' }}>{emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown'}</div>
-                              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Date: {record.date}</div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: 700, color: '#10b981', fontSize: '1.1rem' }}>${record.totalAmount.toFixed(2)}</div>
-                                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: record.status === 'Paid' ? '#10b981' : '#f59e0b' }}>
-                                  {record.status || 'Pending'}
-                                </div>
-                              </div>
-                              <button onClick={() => handleDeletePayroll(record.id as string)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
+              {/* TAB 3: NOTES & PHOTOS */}
+              {activeDetailTab === 'media' && (
+                <div className="fade-in">
+                  {/* NOTES */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                    <div style={s.noteBoxGray}>
+                      <span style={s.detailLabel}><StickyNote size={14} /> GENERAL NOTE</span>
+                      <span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.note || 'No notes provided.'}</span>
+                    </div>
+                    <div style={s.noteBoxOrange}>
+                      <span style={{ ...s.detailLabel, color: '#c2410c' }}><PenTool size={14} /> EMPLOYEE'S NOTE</span>
+                      <span style={{ ...s.detailValue, fontSize: '0.95rem', color: '#7c2d12' }}>{selectedHouse.employeeNote || 'No employee notes provided.'}</span>
                     </div>
                   </div>
-                )}
 
-                <div className="col-span-full" style={{ marginTop: '10px' }}>
+                  {/* PHOTOS GRID */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                     <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -1420,7 +1987,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                           </>
                         )}
                       </div>
-                      {beforePhotoURLs.length === 0 ? <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos</div> : 
+                      {beforePhotoURLs.length === 0 ? <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos uploaded.</div> : 
                         <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
                           {beforePhotoURLs.map((url, i) => (
                             <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
@@ -1441,7 +2008,7 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                           </>
                         )}
                       </div>
-                      {afterPhotoURLs.length === 0 ? <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos</div> : 
+                      {afterPhotoURLs.length === 0 ? <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', padding: '20px 0' }}>No photos uploaded.</div> : 
                         <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
                           {afterPhotoURLs.map((url, i) => (
                             <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
@@ -1459,21 +2026,148 @@ export default function HousesView({ onOpenMenu, properties, setProperties, onCh
                     </div>
                   )}
                 </div>
+              )}
 
-                <div className="col-span-full"><div style={s.noteBoxGray}><span style={{ ...s.detailLabel, marginBottom: '8px' }}><StickyNote size={14} /> GENERAL NOTE</span><span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.note || 'No notes.'}</span></div></div>
-                <div className="col-span-full"><div style={s.noteBoxOrange}><span style={{ ...s.detailLabel, marginBottom: '8px', color: '#c2410c' }}><PenTool size={14} /> EMPLOYEE'S NOTE</span><span style={{ ...s.detailValue, fontSize: '0.95rem' }}>{selectedHouse.employeeNote || 'No employee notes.'}</span></div></div>
-
-              </div>
             </div>
 
             <footer style={s.footerBetween}>
               <div style={{ display: 'flex', gap: '8px' }}>
-                {canDelete && <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}><Trash2 size={16} style={{ marginRight: '6px' }} /> Delete</button>}
+                {canDelete && <button style={s.btnDangerLight} onClick={handleDelete} disabled={isSaving}><Trash2 size={16} style={{ marginRight: '6px' }} /> Delete Property</button>}
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button style={s.btnOutline} onClick={() => setIsDetailModalOpen(false)}>Close</button>
-                {canEdit && <button style={s.btnPrimary} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>}
+                <button style={{...s.actionBtn, ...s.btnOutline}} onClick={() => setIsDetailModalOpen(false)}>Close</button>
+                {canEdit && <button style={{...s.actionBtn, ...s.btnPrimary}} onClick={() => handleOpenForm(selectedHouse)}><Edit2 size={16} /> Edit Details</button>}
               </div>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL ADD / EDIT SERVICE --- */}
+      {isServiceModalOpen && (
+        <div className="modal-overlay-centered" onClick={() => setIsServiceModalOpen(false)} style={{ zIndex: 10001 }}>
+          <div className="modal-70" style={{ maxWidth: '650px' }} onClick={e => e.stopPropagation()}>
+            <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Calculator size={20} color="#3b82f6" /> {serviceForm.id ? 'Edit Service Record' : 'Add Service Record'}
+              </h3>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }} onClick={() => setIsServiceModalOpen(false)}><X size={24} /></button>
+            </header>
+
+            <div style={{ padding: '30px', overflowY: 'auto', backgroundColor: '#f8fafc' }}>
+              
+              {/* BLOCK 1: DETAILS */}
+              <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
+                <h4 style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>1. Item Details</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                  <div>
+                    <label style={s.label}>Product / Service <span style={{ color: '#3b82f6' }}>*</span></label>
+                    <CustomSelect 
+                      options={services} 
+                      value={serviceForm.serviceId} 
+                      onChange={(val: string) => setServiceForm({ ...serviceForm, serviceId: val })} 
+                      placeholder="Select from catalog..." 
+                      icon={Wrench} 
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={s.label}>Quantity <span style={{ color: '#3b82f6' }}>*</span></label>
+                      <div style={{ position: 'relative' }}>
+                        <Hash size={16} color="#9ca3af" style={{ position: 'absolute', left: '12px', top: '12px' }} />
+                        <input type="number" min="1" step="1" style={{...s.input, paddingLeft: '36px'}} value={serviceForm.quantity} onChange={(e) => setServiceForm({ ...serviceForm, quantity: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={s.label}>Unit Price ($) <span style={{ color: '#3b82f6' }}>*</span></label>
+                      <div style={{ position: 'relative' }}>
+                        <DollarSign size={16} color="#9ca3af" style={{ position: 'absolute', left: '12px', top: '12px' }} />
+                        <input type="number" step="0.01" style={{...s.input, paddingLeft: '36px'}} value={serviceForm.price || ''} onChange={(e) => setServiceForm({ ...serviceForm, price: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={s.label}>Notes</label>
+                    <div style={{ position: 'relative' }}>
+                      <StickyNote size={16} color="#9ca3af" style={{ position: 'absolute', left: '12px', top: '12px' }} />
+                      <textarea style={{...s.input, paddingLeft: '36px', minHeight: '60px', resize: 'vertical'}} placeholder="Add descriptions..." value={serviceForm.notes} onChange={e => setServiceForm({ ...serviceForm, notes: e.target.value })}></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* BLOCK 2: TAX SETTINGS */}
+              <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
+                <h4 style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>2. Tax Settings</h4>
+                
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={s.label}>Apply Tax?</label>
+                  <div style={s.segmentContainer}>
+                    <button type="button" onClick={() => setServiceForm({...serviceForm, applyTax: 'Yes'})} style={s.segmentBtn(serviceForm.applyTax === 'Yes', 'yes')}>Yes, Add Tax</button>
+                    <button type="button" onClick={() => setServiceForm({...serviceForm, applyTax: 'No'})} style={s.segmentBtn(serviceForm.applyTax === 'No', 'no')}>No</button>
+                  </div>
+                </div>
+
+                {serviceForm.applyTax === 'Yes' && (
+                  <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                    <label style={s.label}>Tax Percentage (%)</label>
+                    <div style={{ position: 'relative', width: '50%' }}>
+                      <Percent size={16} color="#3b82f6" style={{ position: 'absolute', left: '12px', top: '12px' }} />
+                      <input type="number" step="0.1" style={{...s.input, paddingLeft: '36px'}} value={serviceForm.taxPercentage} onChange={(e) => setServiceForm({ ...serviceForm, taxPercentage: Number(e.target.value) })} />
+                    </div>
+                  </div>
+                )}
+
+                {serviceForm.applyTax === 'No' && (
+                  <div style={{ backgroundColor: '#fff1f2', padding: '16px', borderRadius: '8px', border: '1px dashed #fecaca' }}>
+                    <label style={{...s.label, color: '#991b1b'}}>Minus Tax? (Deduct from subtotal)</label>
+                    <div style={{...s.segmentContainer, backgroundColor: '#fef2f2', marginBottom: serviceForm.minusTax === 'Yes' ? '16px' : '0' }}>
+                      <button type="button" onClick={() => setServiceForm({...serviceForm, minusTax: 'Yes'})} style={s.segmentBtn(serviceForm.minusTax === 'Yes', 'no')}>Yes, Deduct</button>
+                      <button type="button" onClick={() => setServiceForm({...serviceForm, minusTax: 'No'})} style={{...s.segmentBtn(serviceForm.minusTax === 'No', 'no'), color: serviceForm.minusTax === 'No' ? '#64748b' : '#94a3b8'}}>No, Keep Subtotal</button>
+                    </div>
+
+                    {serviceForm.minusTax === 'Yes' && (
+                      <>
+                        <label style={{...s.label, color: '#991b1b'}}>Tax Percentage to Deduct (%)</label>
+                        <div style={{ position: 'relative', width: '50%' }}>
+                          <Percent size={16} color="#ef4444" style={{ position: 'absolute', left: '12px', top: '12px' }} />
+                          <input type="number" step="0.1" style={{...s.input, paddingLeft: '36px', borderColor: '#fca5a5'}} value={serviceForm.taxPercentage} onChange={(e) => setServiceForm({ ...serviceForm, taxPercentage: Number(e.target.value) })} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* BLOCK 3: SUMMARY */}
+              <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <h4 style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>3. Summary</h4>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#64748b', fontSize: '0.95rem' }}>
+                  <span>Subtotal</span>
+                  <span style={{ fontWeight: 600, color: '#1e293b' }}>${serviceForm.subtotal.toFixed(2)}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', color: '#64748b', fontSize: '0.95rem' }}>
+                  <span>Tax Amount</span>
+                  <span style={{ fontWeight: 600, color: serviceForm.taxAmount > 0 ? '#ef4444' : '#1e293b' }}>
+                    {serviceForm.taxAmount > 0 ? '+' : (serviceForm.minusTax === 'Yes' && serviceForm.applyTax === 'No') ? '-' : ''}${Math.abs(serviceForm.taxAmount).toFixed(2)}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '16px', borderTop: '2px dashed #cbd5e1', fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                  <span>Total</span>
+                  <span style={{ color: '#047857' }}>${serviceForm.total.toFixed(2)}</span>
+                </div>
+              </div>
+
+            </div>
+
+            <footer style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button style={{...s.actionBtn, ...s.btnOutline}} onClick={() => setIsServiceModalOpen(false)} disabled={isSaving}>Cancel</button>
+              <button style={{...s.actionBtn, ...s.btnPrimary}} onClick={handleSaveService} disabled={isSaving}>
+                {isSaving ? 'Processing...' : 'Save Record'}
+              </button>
             </footer>
           </div>
         </div>

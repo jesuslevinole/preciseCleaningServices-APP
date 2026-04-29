@@ -1,12 +1,12 @@
 import { 
   Building2, Home, Settings as SettingsIcon, Users, CalendarDays,
-  ShieldCheck, UserPlus, LogOut, DollarSign, ClipboardCheck, X, FileText 
+  ShieldCheck, UserPlus, LogOut, DollarSign, ClipboardCheck, X, FileText, Megaphone 
 } from 'lucide-react';
 import { auth } from '../config/firebase';
 import { signOut } from 'firebase/auth';
-import type { Role } from '../types/index';
+import type { Role, Permission } from '../types/index';
 
-type TabOptions = 'houses' | 'calendar' | 'invoices' | 'done' | 'qc_report' | 'qc_route' | 'payroll' | 'customers' | 'settings' | 'roles' | 'users';
+type TabOptions = 'houses' | 'calendar' | 'invoices' | 'board' | 'done' | 'qc_report' | 'qc_route' | 'payroll' | 'customers' | 'settings' | 'roles' | 'users';
 
 interface SidebarProps {
   isSidebarOpen: boolean;
@@ -26,7 +26,8 @@ export default function Sidebar({
     if (isSuperAdmin) return true; 
     if (!activeRole) return false;
     
-    const permission = activeRole.permissions?.find(p => p.module === moduleName);
+    // Aquí solucionamos el error de la variable "p" agregando el tipo (p: Permission)
+    const permission = activeRole.permissions?.find((p: Permission) => p.module === moduleName);
     return permission ? permission.canView : false;
   };
 
@@ -96,6 +97,12 @@ export default function Sidebar({
               </button>
             </>
           )}
+
+          {/* EL MURO DE ANUNCIOS */}
+          <button className={`nav-item ${activeTab === 'board' ? 'active' : ''}`} onClick={() => handleNavClick('board')}>
+            <Megaphone size={20} className="nav-icon" />
+            {isSidebarOpen && <span className="nav-text">Notice Board</span>}
+          </button>
 
           {canView('Calendar') && (
             <button className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`} onClick={() => handleNavClick('calendar')}>
